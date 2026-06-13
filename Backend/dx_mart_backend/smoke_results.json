@@ -1,0 +1,32 @@
+[
+    {
+        "path": "\/vendor\/profile",
+        "status": 0,
+        "body": false
+    },
+    {
+        "path": "\/vendor\/products",
+        "status": 0,
+        "body": false
+    },
+    {
+        "path": "\/vendor\/orders",
+        "status": 0,
+        "body": false
+    },
+    {
+        "path": "\/vendor\/pincodes",
+        "status": 0,
+        "body": false
+    },
+    {
+        "path": "\/vendor\/pincodes\/update",
+        "status": 0,
+        "body": false
+    },
+    {
+        "path": "\/vendor\/products\/insert",
+        "status": 0,
+        "body": false
+    }
+]

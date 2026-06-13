@@ -1,0 +1,13 @@
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Archive / backup artifacts (not source)
+*.zip
+*.7z
+*.apk
+
+# Editor / IDE
+.idea/
+.vscode/
+*.iml
