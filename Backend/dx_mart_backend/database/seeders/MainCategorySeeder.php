@@ -42,7 +42,7 @@ class MainCategorySeeder extends Seeder
             $image = $categoryImages[$index % max(1, count($categoryImages))] ?? null;
 
             MainCategory::updateOrCreate(
-                ['name' => $cat['name'], 'parent_id' => null],
+                ['name' => $cat['name']],
                 ['position' => $cat['position'], 'is_active' => 1, 'image' => $image, 'icon_url' => $image]
             );
         }

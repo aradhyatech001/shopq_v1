@@ -13,8 +13,7 @@ class HomeTabSeeder extends Seeder
         // Tab types: all (full home), category (main category + subcategories),
         // none (themed/section-only). Idempotent by name; sections are seeded
         // separately by HomeSectionsSeeder.
-        $fresh = MainCategory::whereNull('parent_id')
-            ->where('name', 'like', '%Fruits%')->value('id');
+        $fresh = MainCategory::where('name', 'like', '%Fruits%')->value('id');
 
         $tabs = [
             ['name' => 'All',         'icon' => 'all',     'type' => 'all',      'category_id' => null,   'bg_color' => '#6C63FF', 'position' => 0],

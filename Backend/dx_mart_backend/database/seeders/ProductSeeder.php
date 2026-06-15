@@ -31,9 +31,9 @@ class ProductSeeder extends Seeder
         $productImages = $this->storageImageFiles('products');
         $productIndex  = 0;
 
-        // Get category IDs by name
-        $cats = DB::table('main_category')->whereNull('parent_id')->pluck('id', 'name');
-        $subs = DB::table('main_category')->whereNotNull('parent_id')->pluck('id', 'name');
+        // Get category IDs by name (subcategories live in sub_category now)
+        $cats = DB::table('main_category')->pluck('id', 'name');
+        $subs = DB::table('sub_category')->pluck('id', 'name');
 
         // Get vendor IDs
         $vendors = DB::table('vendors')->pluck('id', 'email');

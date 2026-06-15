@@ -34,6 +34,11 @@ class DatabaseSeeder extends Seeder
             OrderSeeder::class,          // depends on users + products
             WishlistSeeder::class,
 
+            // ── Fill every remaining table (banner, coupon, settings,
+            //    help, product info/highlights, flash deal, order
+            //    assignment, district/city, otp, cart) ──────────────
+            RemainingDataSeeder::class,  // depends on products/orders/users/boys
+
             // ── Legacy (guarded) ─────────────────────────────────
             VendorTokensSeeder::class,
         ]);

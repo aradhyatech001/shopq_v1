@@ -13,9 +13,9 @@ class AppSettingsSeeder extends Seeder
         // Only inserts keys that don't already exist, so admin edits are
         // never overwritten on re-seed.
         $defaults = [
-            'primary_color'      => '#F5BF14',
-            'secondary_color'    => '#FFC63A',
-            'app_name'           => 'DxMart',
+            'primary_color'      => '#009c08',
+            'secondary_color'    => '#46ff55',
+            'app_name'           => 'ShopQ',
             'delivery_time_text' => '24 Min',
             'free_delivery_text' => '₹0 delivery fee',
             'search_hint'        => 'Search for "Milk"',
