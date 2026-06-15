@@ -264,6 +264,33 @@ class ProductSeeder extends Seeder
                 ]));
             }
 
+            // Product highlights (key features) — so "View product details" works.
+            $highlights = $entry['p']['highlights'] ?? [
+                'Quality'      => 'Quality checked & hygienically packed',
+                'Freshness'    => 'Sourced fresh daily',
+                'Return'       => 'Easy returns within 24 hours',
+            ];
+            foreach ($highlights as $attr => $val) {
+                DB::table('product_highlights')->insert([
+                    'product_id' => $productId, 'attribute' => $attr, 'value' => $val,
+                    'created_at' => $now, 'updated_at' => $now,
+                ]);
+            }
+
+            // Product info (specifications) shown in the details panel.
+            $info = $entry['p']['info'] ?? [
+                'Country of Origin' => 'India',
+                'Shelf Life'        => '7 days from packaging',
+                'Customer Care'     => 'support@shopq.com',
+                'Seller'            => 'ShopQ Retail',
+            ];
+            foreach ($info as $attr => $val) {
+                DB::table('product_info')->insert([
+                    'product_id' => $productId, 'attribute' => $attr, 'value' => $val,
+                    'created_at' => $now, 'updated_at' => $now,
+                ]);
+            }
+
             $productIndex++;
         }
     }

@@ -13,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../BottomNav/Screens/order_screen.dart';
 import '../DeliveryAddress/delivery_address_screen.dart';
 import '../utils/api_constants.dart';
+import '../utils/app_config.dart';
 import '../utils/colors.dart';
 
 class CheckoutScreen extends StatefulWidget {
@@ -79,6 +80,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     selectedMonth = DateTime.now();
     selectedDate = DateTime.now();
     selectedTimeSlot = timeSlots[selectedIndex];
+
+    // Default to whichever payment method the admin has enabled.
+    if (AppConfig.codEnabled) {
+      selectedPaymentMethod = 'cod';
+    } else if (AppConfig.onlineEnabled) {
+      selectedPaymentMethod = 'upi';
+    }
 
     // Initialize localDates with current month days
     _updateLocalDates();
@@ -669,7 +677,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                             ),
                             SizedBox(height: 10.h),
 
-                            // UPI Payment Option
+                            // UPI Payment Option (admin-controlled)
+                            if (AppConfig.onlineEnabled) ...[
                             Container(
                               width: double.infinity,
                               decoration: BoxDecoration(
@@ -816,8 +825,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                             ),
 
                             SizedBox(height: 15.h),
+                            ],
 
-                            // COD Payment Option
+                            // COD Payment Option (admin-controlled)
+                            if (AppConfig.codEnabled)
                             Container(
                               width: double.infinity,
                               decoration: BoxDecoration(
@@ -888,6 +899,25 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                 ),
                               ),
                             ),
+
+                            // No payment methods enabled by admin
+                            if (!AppConfig.codEnabled && !AppConfig.onlineEnabled)
+                              Container(
+                                width: double.infinity,
+                                padding: EdgeInsets.all(16.w),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(12.r),
+                                  border: Border.all(color: Colors.orange),
+                                ),
+                                child: Text(
+                                  'No payment method is currently available. Please try again later.',
+                                  style: GoogleFonts.jost(
+                                    fontSize: 12.sp,
+                                    color: Colors.orange.shade900,
+                                  ),
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -971,41 +1001,47 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                             return;
                           }
 
-                          if (selectedPaymentMethod == 'upi') {
+                          // Guard against a method the admin has disabled.
+                          if (selectedPaymentMethod == 'upi' &&
+                              !AppConfig.onlineEnabled) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text('UPI payment not enabled yet'),
+                                content: Text('Online payment is not available'),
                                 backgroundColor: Colors.red,
                               ),
                             );
-                            return; // order place nahi hoga
+                            return;
+                          }
+                          if (selectedPaymentMethod == 'cod' &&
+                              !AppConfig.codEnabled) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Cash on Delivery is not available'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                            return;
                           }
 
-                          if (selectedPaymentMethod == 'cod') {
-                            placeOrder(
-                              userId: widget.userId,
-                              couponCode: widget.coupon_code_name,
-                              discountAmount: widget.saveAmount,
-                              deliveryCharge: widget.deliveyCharge,
-                              handlingCharge: widget.handlingCharge,
-                              paymentMethod: 'COD',
-                              deliveryDate:
-                              selectedDate != null
-                                  ? DateFormat(
-                                'yyyy-MM-dd',
-                              ).format(selectedDate!)
-                                  : DateFormat(
-                                'yyyy-MM-dd',
-                              ).format(DateTime.now()),
-                              deliverTime: selectedTimeSlot,
-                              dateTimeNow: DateFormat(
-                                'dd-MM-yyyy hh:mm a',
-                              ).format(DateTime.now()),
-                              locationId: location_id,
-                              famount: widget.finalWithCharge,
-                              context: context,
-                            );
-                          }
+                          placeOrder(
+                            userId: widget.userId,
+                            couponCode: widget.coupon_code_name,
+                            discountAmount: widget.saveAmount,
+                            deliveryCharge: widget.deliveyCharge,
+                            handlingCharge: widget.handlingCharge,
+                            paymentMethod:
+                                selectedPaymentMethod == 'upi' ? 'UPI' : 'COD',
+                            deliveryDate: selectedDate != null
+                                ? DateFormat('yyyy-MM-dd').format(selectedDate!)
+                                : DateFormat('yyyy-MM-dd').format(DateTime.now()),
+                            deliverTime: selectedTimeSlot,
+                            dateTimeNow: DateFormat(
+                              'dd-MM-yyyy hh:mm a',
+                            ).format(DateTime.now()),
+                            locationId: location_id,
+                            famount: widget.finalWithCharge,
+                            context: context,
+                          );
                         },
                         child: Container(
                           width: 170.w,

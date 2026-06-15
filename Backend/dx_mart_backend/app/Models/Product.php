@@ -30,6 +30,16 @@ class Product extends Model
         return $this->belongsTo(Vendor::class, 'vendor_id');
     }
 
+    /// Only products that should be shown to customers: admin products
+    /// (no vendor) or products from an APPROVED vendor. Hides products from
+    /// pending / rejected / suspended vendors.
+    public function scopeVisible($query) {
+        return $query->where(function ($q) {
+            $q->whereNull('vendor_id')
+              ->orWhereHas('vendor', fn($v) => $v->where('status', 'approved'));
+        });
+    }
+
     public function variants() {
         return $this->hasMany(ProductVariant::class, 'product_id');
     }

@@ -134,6 +134,7 @@ class _BannerManagementScreenState extends State<BannerManagementScreen> {
     final catIds = _categories.map((c) => c['id'].toString()).toList();
     final rawCatId = banner['category_id']?.toString();
     String? editCatId = catIds.contains(rawCatId) ? rawCatId : null;
+    final currentImage = (banner['banner_image'] ?? '').toString();
     Uint8List? editBytes;
     String? editFileName;
     bool saving = false;
@@ -166,8 +167,20 @@ class _BannerManagementScreenState extends State<BannerManagementScreen> {
                           width: double.infinity,
                           fit: BoxFit.cover,
                         )
+                      : currentImage.isEmpty
+                      // Image.network('') throws synchronously on web and the
+                      // whole dialog fails to render — guard it with a placeholder.
+                      ? Container(
+                          height: 120.h,
+                          width: double.infinity,
+                          color: AppColors.backgroundColor,
+                          child: const Icon(
+                            Icons.image,
+                            color: AppColors.hintTextColor,
+                          ),
+                        )
                       : Image.network(
-                          banner['banner_image'] ?? '',
+                          currentImage,
                           height: 120.h,
                           width: double.infinity,
                           fit: BoxFit.cover,

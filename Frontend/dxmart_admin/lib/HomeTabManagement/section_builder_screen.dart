@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker_web/image_picker_web.dart';
 
 import '../utils/admin_api.dart';
 import '../utils/api_constants.dart';
@@ -278,6 +280,12 @@ class _SectionFormState extends State<_SectionForm> {
   bool _loadingSubs = false;
   bool _saving = false;
 
+  // Banner section: image upload + optional "tap → category" link.
+  Uint8List? _bannerBytes;
+  String? _bannerName;
+  String? _existingBannerUrl;
+  int? _linkCategoryId;
+
   static const _types = [
     'product_type', 'products', 'category_grid', 'brand_grid', 'shop_grid', 'banner',
   ];
@@ -308,8 +316,25 @@ class _SectionFormState extends State<_SectionForm> {
       _subcategoryId = e['subcategory_id'] is int
           ? e['subcategory_id']
           : int.tryParse('${e['subcategory_id'] ?? ''}');
+      _existingBannerUrl = (e['banner_image'] ?? '').toString();
+      _linkCategoryId = e['link_category_id'] is int
+          ? e['link_category_id']
+          : int.tryParse('${e['link_category_id'] ?? ''}');
       if (_categoryId != null) _loadSubcategories(_categoryId!);
     }
+  }
+
+  Future<void> _pickBannerImage() async {
+    final bytes = await ImagePickerWeb.getImageAsBytes();
+    if (bytes == null) return;
+    if (bytes.lengthInBytes > 512000) {
+      widget.snack('Image must be under 500 KB');
+      return;
+    }
+    setState(() {
+      _bannerBytes = bytes;
+      _bannerName = 'section_${DateTime.now().millisecondsSinceEpoch}.png';
+    });
   }
 
   Future<void> _loadSubcategories(int categoryId) async {
@@ -339,6 +364,13 @@ class _SectionFormState extends State<_SectionForm> {
   }
 
   Future<void> _save() async {
+    // A banner section is pointless without an image.
+    if (_type == 'banner' &&
+        _bannerBytes == null &&
+        (_existingBannerUrl == null || _existingBannerUrl!.isEmpty)) {
+      widget.snack('Pick a banner image to show');
+      return;
+    }
     setState(() => _saving = true);
     try {
       final body = <String, String>{
@@ -350,6 +382,9 @@ class _SectionFormState extends State<_SectionForm> {
         if (_type == 'product_type' && _productType != null) 'product_type': _productType!,
         if (_isProductRow && _categoryId != null) 'main_category_id': '$_categoryId',
         if (_isProductRow && _subcategoryId != null) 'subcategory_id': '$_subcategoryId',
+        if (_type == 'banner' && _bannerBytes != null) 'banner_data': base64Encode(_bannerBytes!),
+        if (_type == 'banner' && _bannerName != null) 'banner_name': _bannerName!,
+        if (_type == 'banner' && _linkCategoryId != null) 'link_category_id': '$_linkCategoryId',
       };
       final url = widget.existing != null
           ? ApiConstants.HOME_SECTIONS_EDIT
@@ -476,15 +511,49 @@ class _SectionFormState extends State<_SectionForm> {
                   decoration: _deco(hint: '10'),
                 ),
               ],
-              if (_type == 'banner')
-                Padding(
-                  padding: EdgeInsets.only(top: 4.h),
-                  child: Text(
-                    'Tip: set the banner image after saving from the section list '
-                    '(image upload coming in the editor).',
-                    style: GoogleFonts.jost(fontSize: 11.sp, color: AppColors.hintTextColor),
+              if (_type == 'banner') ...[
+                _label('Banner image (what shows to users)'),
+                GestureDetector(
+                  onTap: _pickBannerImage,
+                  child: Container(
+                    height: 110.h,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: AppColors.backgroundColor,
+                      borderRadius: BorderRadius.circular(10.r),
+                      border: Border.all(color: AppColors.borderColor),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: _bannerBytes != null
+                        ? Image.memory(_bannerBytes!, fit: BoxFit.cover, width: double.infinity)
+                        : (_existingBannerUrl != null && _existingBannerUrl!.isNotEmpty)
+                            ? Image.network(
+                                _existingBannerUrl!,
+                                fit: BoxFit.cover,
+                                width: double.infinity,
+                                errorBuilder: (_, __, ___) => _bannerPlaceholder(),
+                              )
+                            : _bannerPlaceholder(),
                   ),
                 ),
+                SizedBox(height: 6.h),
+                Text('Tap to ${_bannerBytes != null || (_existingBannerUrl?.isNotEmpty ?? false) ? 'change' : 'choose'} · 600×240 recommended · Max 500 KB',
+                    style: GoogleFonts.jost(fontSize: 11.sp, color: AppColors.hintTextColor)),
+                SizedBox(height: 12.h),
+                _label('On tap, open category (optional)'),
+                DropdownButtonFormField<int>(
+                  value: _linkCategoryId,
+                  isExpanded: true,
+                  decoration: _deco(),
+                  items: [
+                    const DropdownMenuItem<int>(value: null, child: Text('No link')),
+                    ...widget.categories.map<DropdownMenuItem<int>>((c) => DropdownMenuItem(
+                        value: c['id'] is int ? c['id'] : int.tryParse('${c['id']}'),
+                        child: Text(c['name'] ?? '', style: GoogleFonts.jost()))),
+                  ],
+                  onChanged: (v) => setState(() => _linkCategoryId = v),
+                ),
+              ],
             ],
           ),
         ),
@@ -505,6 +574,17 @@ class _SectionFormState extends State<_SectionForm> {
   Widget _label(String t) => Padding(
         padding: EdgeInsets.only(bottom: 6.h),
         child: Text(t, style: GoogleFonts.jost(fontSize: 12.sp, fontWeight: FontWeight.w600)),
+      );
+
+  Widget _bannerPlaceholder() => Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.add_photo_alternate_outlined, size: 30.sp, color: AppColors.hintTextColor),
+            SizedBox(height: 4.h),
+            Text('Choose image', style: GoogleFonts.jost(fontSize: 11.sp, color: AppColors.hintTextColor)),
+          ],
+        ),
       );
 
   InputDecoration _deco({String? hint}) => InputDecoration(

@@ -220,7 +220,7 @@ class _CouponScreenState extends State<CouponScreen> {
                                       Text(
                                         coupon['description'],
                                         style: GoogleFonts.jost(
-                                          fontWeight: FontWeight.w600,
+                                          fontWeight: FontWeight.w300,
                                           fontSize: 12.sp,
                                         ),
                                       ),

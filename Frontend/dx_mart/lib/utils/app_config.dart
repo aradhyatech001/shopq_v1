@@ -19,9 +19,22 @@ class AppConfig {
   static String get assurance2     => str('assurance_2', 'Quality Checked');
   static String get assurance3     => str('assurance_3', 'Easy Returns');
 
+  // Payment methods (admin-controlled). COD defaults on, online defaults off.
+  static bool get codEnabled    => flag('payment_cod_enabled', true);
+  static bool get onlineEnabled => flag('payment_online_enabled', false);
+
   static String str(String key, [String fallback = '']) {
     final v = _values[key];
     return (v == null || '$v'.isEmpty) ? fallback : '$v';
+  }
+
+  /// Reads a boolean-ish setting. Treats '1'/'true' as true, '0'/'false' as
+  /// false, and anything missing/empty as [fallback].
+  static bool flag(String key, [bool fallback = false]) {
+    final v = _values[key];
+    if (v == null || '$v'.isEmpty) return fallback;
+    final s = '$v'.toLowerCase();
+    return s == '1' || s == 'true' || s == 'yes';
   }
 
   /// Loads the config and applies the theme colors. Never throws — on any

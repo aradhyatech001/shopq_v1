@@ -511,7 +511,9 @@ class _CategoryViewScreenState extends State<CategoryViewScreen> {
                               gridDelegate:
                                   SliverGridDelegateWithFixedCrossAxisCount(
                                     crossAxisCount: 2,
-                                    childAspectRatio: 0.52,
+                                    mainAxisExtent: 235.h,
+                                    crossAxisSpacing: 6.w,
+                                    mainAxisSpacing: 8.h,
                                   ),
                               itemBuilder: (context, index) {
                                 return ProductCard(

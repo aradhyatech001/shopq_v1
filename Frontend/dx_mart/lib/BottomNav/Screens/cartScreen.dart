@@ -1262,30 +1262,44 @@ class _CartScreenState extends State<CartScreen> {
                                               ),
                                             ),
 
-                                            Spacer(),
-
                                             if (selectedCodeName != null) ...[
-                                              SizedBox(width: 8.w),
-                                              Text(
-                                                "$selectedCodeName  (${selectedDiscount.toStringAsFixed(0)}% OFF)",
-                                                style: GoogleFonts.jost(
-                                                  fontWeight: FontWeight.w600,
-                                                  color: Colors.green,
-                                                  fontSize: 12.sp,
+                                              Expanded(
+                                                child: Padding(
+                                                  padding: EdgeInsets.symmetric(
+                                                    horizontal: 8.w,
+                                                  ),
+                                                  child: Text(
+                                                    "$selectedCodeName (${selectedDiscount.toStringAsFixed(0)}% OFF)",
+                                                    textAlign: TextAlign.end,
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: GoogleFonts.jost(
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      color: Colors.green,
+                                                      fontSize: 12.sp,
+                                                    ),
+                                                  ),
                                                 ),
                                               ),
-                                              SizedBox(width: 8.w),
-                                              // Add remove coupon button
-                                              // InkWell(
-                                              //   onTap: _removeCoupon,
-                                              //   child: Icon(
-                                              //     Icons.close,
-                                              //     size: 16.sp,
-                                              //     color: Colors.red,
-                                              //   ),
-                                              // ),
+                                              // Remove applied coupon
+                                              InkWell(
+                                                onTap: _removeCoupon,
+                                                borderRadius:
+                                                    BorderRadius.circular(20.r),
+                                                child: Padding(
+                                                  padding: EdgeInsets.all(2.w),
+                                                  child: Icon(
+                                                    Icons.close_rounded,
+                                                    size: 16.sp,
+                                                    color: Colors.red,
+                                                  ),
+                                                ),
+                                              ),
+                                              SizedBox(width: 6.w),
                                             ] else ...[
-                                              SizedBox(width: 8.w),
+                                              const Spacer(),
                                               Text(
                                                 'Select',
                                                 style:
@@ -1297,6 +1311,7 @@ class _CartScreenState extends State<CartScreen> {
                                                       fontSize: 12.sp,
                                                     ),
                                               ),
+                                              SizedBox(width: 8.w),
                                             ],
 
                                             Icon(
@@ -1672,7 +1687,7 @@ class _CartScreenState extends State<CartScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: EdgeInsets.only(left: 16.w, right: 16.w),
+          padding: EdgeInsets.fromLTRB(16.w, 4.h, 16.w, 0.h),
           child: Text(
             title,
             style: GoogleFonts.jost(
@@ -1681,33 +1696,29 @@ class _CartScreenState extends State<CartScreen> {
             ),
           ),
         ),
-        Transform.translate(
-          offset: Offset(0, -20.h),
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16.w),
-            child: SizedBox(
-              height: 530.h,
-              child: GridView.builder(
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  crossAxisSpacing: 10.w,
-                  mainAxisSpacing: 12.h,
-                  childAspectRatio: 0.38,
-                ),
-                itemCount: list.length > 6 ? 6 : list.length,
-                itemBuilder: (context, index) {
-                  final product = list[index];
-                  return ProductCard(
+        // Horizontal product scroll
+        SizedBox(
+          height: 240.h,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: EdgeInsets.only(left: 16.w, right: 4.w),
+            itemCount: list.length > 10 ? 10 : list.length,
+            itemBuilder: (context, index) {
+              final product = list[index];
+              return Padding(
+                padding: EdgeInsets.only(right: 12.w),
+                child: SizedBox(
+                  width: 110.w,
+                  child: ProductCard(
                     product: product,
                     userId: userId,
                     onCartUpdated: () {
                       fetchCartQuantity(userId);
                     },
-                  );
-                },
-              ),
-            ),
+                  ),
+                ),
+              );
+            },
           ),
         ),
       ],
@@ -1902,7 +1913,7 @@ class _CartScreenState extends State<CartScreen> {
 
     return Container(
       width: double.infinity,
-      height: 85.h,
+      height: 95.h,
       margin: EdgeInsets.symmetric(horizontal: 8.w, vertical: 4.h),
       decoration: BoxDecoration(
         image: const DecorationImage(
@@ -1966,61 +1977,74 @@ class _CartScreenState extends State<CartScreen> {
             padding: EdgeInsets.only(left: 25.w, right: 20.w, top: 10.h),
             child: Row(
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        SvgPicture.asset(
-                          'assets/svg/coupon.svg',
-                          width: 18.w,
-                          color: AppColors.secondaryColor,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          SvgPicture.asset(
+                            'assets/svg/coupon.svg',
+                            width: 18.w,
+                            color: AppColors.secondaryColor,
+                          ),
+                          SizedBox(width: 4.w),
+                          Flexible(
+                            child: Text(
+                              coupon['title'] ?? '',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.jost(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12.sp,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Text(
+                        coupon['description'] ?? '',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.jost(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12.sp,
                         ),
-                        SizedBox(width: 4.w),
+                      ),
+                      if (!canApply && !isExpired)
                         Text(
-                          coupon['title'],
+                          'Add ₹${(minAmount - totalSellingAmount).toStringAsFixed(0)} more to apply',
                           style: GoogleFonts.jost(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12.sp,
+                            fontSize: 10.sp,
+                            color: Colors.red,
                           ),
                         ),
-                      ],
-                    ),
-                    Text(
-                      coupon['description'],
-                      style: GoogleFonts.jost(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 12.sp,
-                      ),
-                    ),
-                    if (!canApply && !isExpired)
-                      Text(
-                        'Add ₹${(minAmount - totalSellingAmount).toStringAsFixed(0)} more to apply',
-                        style: GoogleFonts.jost(
-                          fontSize: 10.sp,
-                          color: Colors.red,
-                        ),
-                      ),
-                  ],
-                ),
-                const Spacer(),
-                Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.secondaryColor.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(3.r),
+                    ],
                   ),
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: 10.w,
-                      vertical: 2.h,
+                ),
+                SizedBox(width: 8.w),
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: 110.w),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.secondaryColor.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(3.r),
                     ),
-                    child: Center(
-                      child: Text(
-                        coupon['code_name'],
-                        style: GoogleFonts.jost(
-                          fontSize: 12.sp,
-                          color: Colors.green,
-                          fontWeight: FontWeight.w500,
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 10.w,
+                        vertical: 2.h,
+                      ),
+                      child: Center(
+                        child: Text(
+                          coupon['code_name'] ?? '',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.jost(
+                            fontSize: 12.sp,
+                            color: Colors.green,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ),

@@ -28,6 +28,10 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
   bool _loading = true;
   bool _saving = false;
 
+  // Payment methods shown to customers at checkout (admin-controlled).
+  bool _codEnabled = true;
+  bool _onlineEnabled = false;
+
   final List<_Field> _fields = [
     _Field('primary_color', 'Primary Color', isColor: true),
     _Field('secondary_color', 'Secondary Color', isColor: true),
@@ -62,6 +66,8 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
         for (final f in _fields) {
           f.ctrl.text = '${cfg[f.key] ?? ''}';
         }
+        _codEnabled = '${cfg['payment_cod_enabled'] ?? '1'}' != '0';
+        _onlineEnabled = '${cfg['payment_online_enabled'] ?? '0'}' == '1';
       }
     } catch (_) {
     } finally {
@@ -72,7 +78,11 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      final body = {for (final f in _fields) f.key: f.ctrl.text.trim()};
+      final body = {
+        for (final f in _fields) f.key: f.ctrl.text.trim(),
+        'payment_cod_enabled': _codEnabled ? '1' : '0',
+        'payment_online_enabled': _onlineEnabled ? '1' : '0',
+      };
       final res = await AdminApi.postJson(Uri.parse(ApiConstants.APP_CONFIG_UPDATE), body: body);
       final data = jsonDecode(res.body);
       if (!mounted) return;
@@ -126,6 +136,8 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                               fontSize: 13.sp, color: AppColors.secondaryTextColor)),
                       SizedBox(height: 24.h),
                       ..._fields.map(_buildField),
+                      SizedBox(height: 8.h),
+                      _buildPaymentSection(),
                       SizedBox(height: 24.h),
                       SizedBox(
                         width: double.infinity,
@@ -154,6 +166,50 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                 ),
               ),
             ),
+    );
+  }
+
+  Widget _buildPaymentSection() {
+    return Container(
+      margin: EdgeInsets.only(top: 8.h),
+      padding: EdgeInsets.all(16.w),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceColor,
+        borderRadius: BorderRadius.circular(12.r),
+        border: Border.all(color: AppColors.borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Payment Methods',
+              style: GoogleFonts.jost(fontSize: 16.sp, fontWeight: FontWeight.w700)),
+          SizedBox(height: 2.h),
+          Text('Turn the options customers can use at checkout on or off.',
+              style: GoogleFonts.jost(fontSize: 12.sp, color: AppColors.secondaryTextColor)),
+          SizedBox(height: 8.h),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            activeColor: AppColors.primaryColor,
+            value: _codEnabled,
+            onChanged: (v) => setState(() => _codEnabled = v),
+            title: Text('Cash on Delivery (COD)',
+                style: GoogleFonts.jost(fontSize: 14.sp, fontWeight: FontWeight.w600)),
+            subtitle: Text('Pay in cash when the order arrives',
+                style: GoogleFonts.jost(fontSize: 12.sp, color: AppColors.secondaryTextColor)),
+          ),
+          Divider(height: 1.h, color: AppColors.borderColor),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            activeColor: AppColors.primaryColor,
+            value: _onlineEnabled,
+            onChanged: (v) => setState(() => _onlineEnabled = v),
+            title: Text('Online Payment (UPI)',
+                style: GoogleFonts.jost(fontSize: 14.sp, fontWeight: FontWeight.w600)),
+            subtitle: Text('Pay online via any UPI app',
+                style: GoogleFonts.jost(fontSize: 12.sp, color: AppColors.secondaryTextColor)),
+          ),
+        ],
+      ),
     );
   }
 

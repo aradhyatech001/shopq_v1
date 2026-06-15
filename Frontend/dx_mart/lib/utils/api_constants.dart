@@ -46,6 +46,9 @@ class ApiConstants {
   // ── Admin-configured per-tab storefront layout ───
   static const String TAB_LAYOUT = "$BASE_URL/tab-layout";
 
+  // ── Shop (vendor) public page ─────────────────────
+  static const String SHOP_DETAIL = "$BASE_URL/shop";
+
   // ── Banners ───────────────────────────────────────
   static const String VIEW_SLIDER = "$BASE_URL/banners";
   static const String ADD_BANNER = "$BASE_URL/banners/add";

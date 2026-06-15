@@ -17,6 +17,9 @@ class WishlistController extends Controller
         $userId    = (int) $request->input('user_id', 0);
         $productId = (int) $request->input('product_id', 0);
         if (!$userId || !$productId) return response()->json(['success' => false, 'message' => 'Missing parameters']);
+        if (!\App\Models\User::whereKey($userId)->exists()) {
+            return response()->json(['success' => false, 'code' => 'invalid_user', 'message' => 'Session expired. Please log in again.']);
+        }
 
         Wishlist::firstOrCreate(['user_id' => $userId, 'product_id' => $productId]);
         return response()->json(['success' => true, 'message' => 'Added to wishlist']);

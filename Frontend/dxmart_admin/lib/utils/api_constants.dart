@@ -3,6 +3,8 @@ class ApiConstants {
   // static const String BASE_IMAGE_URL = "http://192.168.1.5:8000/storage/";
   static const String BASE_URL = "http://localhost:8000/api";
   static const String BASE_IMAGE_URL = "http://localhost:8000/storage/";
+  // static const String BASE_URL = "https://shopq.solarsunshakti.com/api";
+  // static const String BASE_IMAGE_URL = "https://shopq.solarsunshakti.com/storage/";
 
   // ── Auth ──────────────────────────────────────────
   static const String LOGIN    = "$BASE_URL/admin/login";
@@ -69,6 +71,7 @@ class ApiConstants {
 
   // ── Coupons ───────────────────────────────────────
   static const String ADD_COUPON = "$BASE_URL/coupons/add";
+  static const String EDIT_COUPON = "$BASE_URL/coupons/edit";
   static const String DELETE_COUPON = "$BASE_URL/coupons/delete";
   static const String VIEW_COUPON = "$BASE_URL/admin/coupons";
 

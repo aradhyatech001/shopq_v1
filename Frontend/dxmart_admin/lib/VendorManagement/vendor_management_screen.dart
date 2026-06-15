@@ -94,9 +94,11 @@ class _VendorManagementScreenState extends State<VendorManagementScreen>
 
   Future<void> _postAction(String url, Map body) async {
     try {
+      // NOTE: postJson() already json-encodes the body. Pass the Map directly —
+      // jsonEncode here would double-encode it and the backend would read null.
       final res = await AdminApi.postJson(
         Uri.parse(url),
-        body: jsonEncode(body),
+        body: body,
       );
       final data = jsonDecode(res.body);
       if (mounted) {

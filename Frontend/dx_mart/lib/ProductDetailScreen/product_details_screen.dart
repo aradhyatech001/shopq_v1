@@ -756,7 +756,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                 ),
                               ),
                               SizedBox(
-                                height: 60.h,
+                                height: 70.h,
                                 child: SingleChildScrollView(
                                   scrollDirection: Axis.horizontal,
                                   physics: const BouncingScrollPhysics(),
@@ -802,8 +802,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                               });
                                             },
                                             child: Container(
-                                              width: 100.w,
-                                              height: 55.h,
+                                              // width: 130.w,
+                                              height: 60.h,
                                               decoration: BoxDecoration(
                                                 gradient: LinearGradient(
                                                   begin: Alignment.centerLeft,
@@ -854,8 +854,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 
                                                   // Variant details
                                                   Container(
-                                                    width: 100.w,
-                                                    height: 35.h,
+                                                    // width: 130.w,
+                                                    height: 40.h,
                                                     decoration: BoxDecoration(
                                                       gradient: isSelected
                                                           ? LinearGradient(
@@ -893,6 +893,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                                       padding: EdgeInsets.only(
                                                         left: 12.w,
                                                         top: 4.h,
+                                                        right: 12.w,
                                                       ),
                                                       child: Column(
                                                         crossAxisAlignment:
@@ -900,7 +901,11 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                                                 .start,
                                                         children: [
                                                           Text(
-                                                            v['name'],
+                                                            v['name'] ?? '',
+                                                            maxLines: 2,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
                                                             style:
                                                                 GoogleFonts.jost(
                                                                   fontSize:
@@ -908,6 +913,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                                                   fontWeight:
                                                                       FontWeight
                                                                           .w400,
+                                                                  height: 1.1,
                                                                 ),
                                                           ),
                                                           RichText(
@@ -967,8 +973,14 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                         InkWell(
                           onTap: () {
                             // Check if there are any details to show
-                            final hasDetails =
-                                highlights.isNotEmpty || info.isNotEmpty;
+                            final hasDescription =
+                                (widget.product['description'] ?? '')
+                                    .toString()
+                                    .trim()
+                                    .isNotEmpty;
+                            final hasDetails = highlights.isNotEmpty ||
+                                info.isNotEmpty ||
+                                hasDescription;
 
                             if (hasDetails) {
                               setState(() {
@@ -1029,6 +1041,31 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Description (shown above Highlights)
+                        if ((widget.product['description'] ?? '')
+                            .toString()
+                            .trim()
+                            .isNotEmpty) ...[
+                          SizedBox(height: 10.h),
+                          Text(
+                            'Description',
+                            style: GoogleFonts.jost(
+                              fontSize: 16.sp,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          SizedBox(height: 8.h),
+                          Text(
+                            widget.product['description'].toString(),
+                            style: GoogleFonts.jost(
+                              fontSize: 14.sp,
+                              height: 1.4,
+                              color: AppColors.primaryTextColor,
+                            ),
+                          ),
+                          SizedBox(height: 6.h),
+                        ],
+
                         // Highlights section
                         if (highlights.isNotEmpty)
                           Column(
@@ -1042,7 +1079,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              SizedBox(height: 10.h),
+                              SizedBox(height: 6.h),
 
                               ...highlights.map(
                                 (item) => Padding(
@@ -1100,7 +1137,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              SizedBox(height: 10.h),
+                              SizedBox(height: 6.h),
                               ...info.map(
                                 (item) => Padding(
                                   padding: EdgeInsets.only(bottom: 8.h),
@@ -1238,12 +1275,12 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                         ),
                       ),
                     ),
-                    SizedBox(height: 12.h),
+                    // SizedBox(height: 8.h),
 
                     SizedBox(
-                      height: 90.h,
+                      height: 85.h,
                       child: ListView.builder(
-                        padding: EdgeInsets.only(left: 12.w),
+                        padding: EdgeInsets.only(left: 12.w, right: 12.w),
                         scrollDirection: Axis.horizontal,
                         itemCount: _couponList.length,
                         itemBuilder: (context, index) {
@@ -1275,7 +1312,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             },
                             child: Container(
                               width: 280.w,
-                              margin: EdgeInsets.only(right: 8.w),
+                              // margin: EdgeInsets.only(right: 8.w, left: 8.w),
                               decoration: const BoxDecoration(
                                 image: DecorationImage(
                                   image: AssetImage(
@@ -1348,7 +1385,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                     ),
                                     child: Row(
                                       children: [
-                                        Column(
+                                        Expanded(
+                                          child: Column(
                                           crossAxisAlignment:
                                               CrossAxisAlignment.start,
                                           children: [
@@ -1361,25 +1399,34 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                                       AppColors.secondaryColor,
                                                 ),
                                                 SizedBox(width: 4.w),
-                                                Text(
-                                                  coupon['title'],
-                                                  style: GoogleFonts.jost(
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 12.sp,
+                                                Flexible(
+                                                  child: Text(
+                                                    coupon['title'] ?? '',
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: GoogleFonts.jost(
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      fontSize: 12.sp,
+                                                    ),
                                                   ),
                                                 ),
                                               ],
                                             ),
                                             Text(
-                                              coupon['description'],
+                                              coupon['description'] ?? '',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
                                               style: GoogleFonts.jost(
-                                                fontWeight: FontWeight.w600,
+                                                fontWeight: FontWeight.w300,
                                                 fontSize: 12.sp,
                                               ),
                                             ),
                                           ],
+                                          ),
                                         ),
-                                        const Spacer(),
+                                        SizedBox(width: 8.w),
                                         Container(
                                           decoration: BoxDecoration(
                                             color: AppColors.secondaryColor
@@ -1418,7 +1465,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                       ),
                     ),
 
-                    SizedBox(height: 20.h),
+                    SizedBox(height: 10.h),
 
                     // Best Selling
                     if (products.isNotEmpty)
@@ -1948,7 +1995,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           ),
         ),
         Transform.translate(
-          offset: Offset(0, -20.h),
+          offset: Offset(0, -35.h),
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 16.w),
             child: SizedBox(

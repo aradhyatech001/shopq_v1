@@ -916,7 +916,7 @@ class _ProductCardState extends State<ProductCard> {
             );
 
         return SizedBox(
-          height: 150.h,
+          height: 235.h, // fits image + name + price + add button (no overflow)
           child: InkWell(
             child: Container(
               decoration: BoxDecoration(

@@ -125,6 +125,163 @@ class _CouponCodeScreenState extends State<CouponCodeScreen> {
     }
   }
 
+  void _showEditCoupon(Map<String, dynamic> coupon) {
+    final titleCtrl = TextEditingController(text: coupon['title']?.toString() ?? '');
+    final descCtrl = TextEditingController(text: coupon['description']?.toString() ?? '');
+    final codeCtrl = TextEditingController(text: coupon['code_name']?.toString() ?? '');
+    final discountCtrl = TextEditingController(text: coupon['discount']?.toString() ?? '');
+    final minAmtCtrl = TextEditingController(text: coupon['min_amount']?.toString() ?? '');
+    final dateCtrl = TextEditingController(text: coupon['expri_date']?.toString() ?? '');
+    final rawStatus = (coupon['status'] ?? 'Public').toString().toLowerCase();
+    String status = rawStatus == 'private' ? 'Private' : 'Public';
+    bool saving = false;
+
+    Widget field(TextEditingController c, String label,
+        {TextInputType type = TextInputType.text, int? maxLen}) {
+      return Padding(
+        padding: EdgeInsets.only(bottom: 12.h),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            FormLabel(label),
+            TextField(
+              controller: c,
+              keyboardType: type,
+              maxLength: maxLen,
+              style: GoogleFonts.jost(fontSize: 13.sp),
+              decoration: InputDecoration(counterText: '', hintText: label),
+            ),
+          ],
+        ),
+      );
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r)),
+          title: Text('Edit Coupon', style: GoogleFonts.jost(fontWeight: FontWeight.w700)),
+          content: SizedBox(
+            width: 380.w,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  field(titleCtrl, 'Title', maxLen: 16),
+                  field(descCtrl, 'Description', maxLen: 28),
+                  field(codeCtrl, 'Code (no spaces)', maxLen: 10),
+                  field(discountCtrl, 'Discount %', type: TextInputType.number, maxLen: 5),
+                  field(minAmtCtrl, 'Min Order Value', type: TextInputType.number),
+                  const FormLabel('Expiry Date', required: true),
+                  TextField(
+                    controller: dateCtrl,
+                    readOnly: true,
+                    style: GoogleFonts.jost(fontSize: 13.sp),
+                    decoration: InputDecoration(
+                      hintText: 'Pick a date',
+                      suffixIcon: const Icon(Icons.calendar_today_outlined,
+                          color: AppColors.hintTextColor),
+                    ),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: ctx,
+                        initialDate: DateTime.now(),
+                        firstDate: DateTime.now(),
+                        lastDate: DateTime(2100),
+                      );
+                      if (picked != null) {
+                        dateCtrl.text = '${picked.day.toString().padLeft(2, '0')}-'
+                            '${picked.month.toString().padLeft(2, '0')}-'
+                            '${picked.year}';
+                      }
+                    },
+                  ),
+                  SizedBox(height: 12.h),
+                  const FormLabel('Status', required: true),
+                  Container(
+                    height: 44.h,
+                    padding: EdgeInsets.symmetric(horizontal: 12.w),
+                    decoration: BoxDecoration(
+                      color: AppColors.backgroundColor,
+                      borderRadius: BorderRadius.circular(10.r),
+                      border: Border.all(color: AppColors.borderColor),
+                    ),
+                    child: DropdownButton<String>(
+                      value: status,
+                      isExpanded: true,
+                      underline: const SizedBox.shrink(),
+                      style: GoogleFonts.jost(fontSize: 13.sp, color: AppColors.primaryTextColor),
+                      items: ['Public', 'Private']
+                          .map((s) => DropdownMenuItem(
+                              value: s, child: Text(s, style: GoogleFonts.jost(fontSize: 13.sp))))
+                          .toList(),
+                      onChanged: (v) => setS(() => status = v ?? 'Public'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: GoogleFonts.jost())),
+            ElevatedButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      if (titleCtrl.text.isEmpty ||
+                          codeCtrl.text.isEmpty ||
+                          discountCtrl.text.isEmpty ||
+                          minAmtCtrl.text.isEmpty ||
+                          dateCtrl.text.isEmpty) {
+                        _snack('All fields are required', AppColors.warningColor);
+                        return;
+                      }
+                      setS(() => saving = true);
+                      try {
+                        final res = await AdminApi.post(
+                          Uri.parse(ApiConstants.EDIT_COUPON),
+                          body: {
+                            'id': coupon['id'].toString(),
+                            'title': titleCtrl.text.toUpperCase(),
+                            'description': descCtrl.text,
+                            'code_name': codeCtrl.text.toUpperCase(),
+                            'discount': discountCtrl.text,
+                            'min_amount': minAmtCtrl.text,
+                            'expri_date': dateCtrl.text,
+                            'status': status,
+                          },
+                        );
+                        final data = jsonDecode(res.body);
+                        if (data['success'] == true) {
+                          if (ctx.mounted) Navigator.pop(ctx);
+                          _snack('Coupon updated!', AppColors.successColor);
+                          _fetchCoupons();
+                        } else {
+                          _snack(data['message'] ?? 'Failed', AppColors.errorColor);
+                        }
+                      } catch (e) {
+                        _snack('Error: $e', AppColors.errorColor);
+                      } finally {
+                        setS(() => saving = false);
+                      }
+                    },
+              child: saving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : Text('Save', style: GoogleFonts.jost(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _deleteCoupon(String id) async {
     final ok = await confirmDelete(
       context,
@@ -207,6 +364,7 @@ class _CouponCodeScreenState extends State<CouponCodeScreen> {
                     separatorBuilder: (_, __) => SizedBox(height: 12.h),
                     itemBuilder: (_, i) => _CouponTile(
                       coupon: _coupons[i],
+                      onEdit: () => _showEditCoupon(_coupons[i]),
                       onDelete: () =>
                           _deleteCoupon(_coupons[i]['id'].toString()),
                       onCopy: () =>
@@ -380,11 +538,13 @@ class _CouponCodeScreenState extends State<CouponCodeScreen> {
 // ── Coupon card ───────────────────────────────────────────────────────────────
 class _CouponTile extends StatelessWidget {
   final Map<String, dynamic> coupon;
+  final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback onCopy;
 
   const _CouponTile({
     required this.coupon,
+    required this.onEdit,
     required this.onDelete,
     required this.onCopy,
   });
@@ -437,6 +597,18 @@ class _CouponTile extends StatelessWidget {
               SizedBox(width: 8.w),
               IconButton(
                 icon: Icon(
+                  Icons.edit_outlined,
+                  color: AppColors.primaryColor,
+                  size: 18.sp,
+                ),
+                onPressed: onEdit,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                tooltip: 'Edit coupon',
+              ),
+              SizedBox(width: 10.w),
+              IconButton(
+                icon: Icon(
                   Icons.delete_outline,
                   color: AppColors.errorColor,
                   size: 18.sp,
@@ -444,6 +616,7 @@ class _CouponTile extends StatelessWidget {
                 onPressed: onDelete,
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
+                tooltip: 'Delete coupon',
               ),
             ],
           ),

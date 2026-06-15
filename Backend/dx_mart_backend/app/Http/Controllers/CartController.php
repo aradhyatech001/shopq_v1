@@ -3,6 +3,8 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\CartItem;
+use App\Models\User;
+use App\Models\Product;
 use Illuminate\Support\Facades\DB;
 
 class CartController extends Controller
@@ -18,6 +20,15 @@ class CartController extends Controller
 
         if (!$userId || !$productId) {
             return response()->json(['success' => false, 'message' => 'Missing data']);
+        }
+
+        // Guard FK violations (stale cached user_id / deleted product) so the API
+        // returns clean JSON instead of a 500 HTML page.
+        if (!User::whereKey($userId)->exists()) {
+            return response()->json(['success' => false, 'code' => 'invalid_user', 'message' => 'Session expired. Please log in again.'], 200);
+        }
+        if (!Product::whereKey($productId)->exists()) {
+            return response()->json(['success' => false, 'message' => 'Product not found']);
         }
 
         $query = CartItem::where('user_id', $userId)->where('product_id', $productId);

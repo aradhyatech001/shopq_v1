@@ -106,6 +106,7 @@ class HomeSectionController extends Controller
             case 'products':
             case 'brand_row':
                 $q = Product::with(['category:id,name,image', 'subcategory:id,name', 'variants', 'info', 'highlights', 'images'])
+                    ->visible()
                     ->where('is_active', 1);
                 if ($categoryId)        $q->where('main_category_id', $categoryId);
                 if ($s->subcategory_id) $q->where('subcategory_id', $s->subcategory_id);

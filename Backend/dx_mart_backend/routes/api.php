@@ -111,6 +111,9 @@ Route::post('/wishlist/remove',       [WishlistController::class, 'remove']);
 Route::post('/vendor/register',       [VendorAuthController::class, 'register']);
 Route::post('/vendor/login',          [VendorAuthController::class, 'login']);
 
+// Public shop page (user app) — shop info + its products
+Route::get('/shop',                   [VendorController::class, 'publicShow']);
+
 // Storage files
 Route::get('/files/{path}', function (string $path) {
     $fullPath = storage_path('app/public/' . $path);
@@ -189,6 +192,7 @@ Route::middleware('auth:admin')->group(function () {
     // Coupons (write)
     Route::get('/admin/coupons',           [CouponController::class, 'viewAll']);
     Route::post('/coupons/add',           [CouponController::class, 'add']);
+    Route::post('/coupons/edit',          [CouponController::class, 'edit']);
     Route::post('/coupons/delete',        [CouponController::class, 'delete']);
 
     // Settings (write)

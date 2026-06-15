@@ -13,6 +13,7 @@ import '../../CategoryViewScreen/categoryViewScreen.dart';
 import '../../CustomWidgets/product_card.dart';
 import '../../LocationScreen/locationScreen.dart';
 import '../../SearchProduct/search_product.dart';
+import '../../Shop/shop_detail_screen.dart';
 import '../../utils/api_constants.dart';
 import '../../utils/app_config.dart';
 import '../../utils/colors.dart';
@@ -301,13 +302,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _fetchCategoriesWithSubs() async {
     try {
-      final res = await ApiHelper.get('${ApiConstants.MAIN_VIEW_CATEGORY}?with_subs=1');
+      final res = await ApiHelper.get(
+        '${ApiConstants.MAIN_VIEW_CATEGORY}?with_subs=1',
+      );
       if (res.statusCode == 200 && mounted) {
         final data = jsonDecode(res.body);
         if (data is List) {
           setState(
-            () => _categoriesWithSubs =
-                List<Map<String, dynamic>>.from(data),
+            () => _categoriesWithSubs = List<Map<String, dynamic>>.from(data),
           );
         }
       }
@@ -326,10 +328,14 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     setState(() => _loadingLayout = true);
     try {
-      final res = await http.get(Uri.parse('${ApiConstants.TAB_LAYOUT}?tab_id=$id'));
+      final res = await http.get(
+        Uri.parse('${ApiConstants.TAB_LAYOUT}?tab_id=$id'),
+      );
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
-        final sections = data['success'] == true ? (data['sections'] as List? ?? []) : [];
+        final sections = data['success'] == true
+            ? (data['sections'] as List? ?? [])
+            : [];
         _layoutCache[id] = sections;
         if (mounted) setState(() => _currentLayout = sections);
       }
@@ -411,7 +417,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildTabIcon(Map tab, bool isSelected) {
     final color = isSelected ? Colors.white : Colors.white70;
     final iconImg = tab['icon_image']?.toString() ?? '';
-    final fallback = Icon(_tabIcon(tab['icon'] ?? 'all'), size: 20.sp, color: color);
+    final fallback = Icon(
+      _tabIcon(tab['icon'] ?? 'all'),
+      size: 20.sp,
+      color: color,
+    );
     if (iconImg.isEmpty) return fallback;
     final url = ApiConstants.imageUrl(iconImg);
     if (iconImg.toLowerCase().endsWith('.svg')) {
@@ -504,7 +514,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     tab['name'],
                     style: GoogleFonts.jost(
                       fontSize: 10.sp,
-                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
+                      fontWeight: isSelected
+                          ? FontWeight.w700
+                          : FontWeight.w400,
                       color: isSelected ? Colors.white : Colors.white70,
                     ),
                   ),
@@ -599,19 +611,28 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          _assuranceItem(Icons.currency_rupee_rounded, AppConfig.assurance1.replaceFirst(' ', '\n')),
+          _assuranceItem(
+            Icons.currency_rupee_rounded,
+            AppConfig.assurance1.replaceFirst(' ', '\n'),
+          ),
           Container(
             width: 1,
             height: 32.h,
             color: AppColors.primaryColor.withValues(alpha: 0.2),
           ),
-          _assuranceItem(Icons.verified_rounded, AppConfig.assurance2.replaceFirst(' ', '\n')),
+          _assuranceItem(
+            Icons.verified_rounded,
+            AppConfig.assurance2.replaceFirst(' ', '\n'),
+          ),
           Container(
             width: 1,
             height: 32.h,
             color: AppColors.primaryColor.withValues(alpha: 0.2),
           ),
-          _assuranceItem(Icons.loop_rounded, AppConfig.assurance3.replaceFirst(' ', '\n')),
+          _assuranceItem(
+            Icons.loop_rounded,
+            AppConfig.assurance3.replaceFirst(' ', '\n'),
+          ),
         ],
       ),
     );
@@ -657,8 +678,8 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         itemCount: subs.length,
         itemBuilder: (ctx, i) {
-          final sub    = subs[i];
-          final subId  = int.tryParse(sub['id'].toString());
+          final sub = subs[i];
+          final subId = int.tryParse(sub['id'].toString());
           final imgUrl = sub['image']?.toString() ?? '';
 
           return GestureDetector(
@@ -831,9 +852,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
-        SizedBox(height: 10.h),
+        SizedBox(height: 5.h),
         SizedBox(
-          height: 250.h,
+          height: 240.h,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             itemCount: products.length,
@@ -861,8 +882,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final source = _categoriesWithSubs.isNotEmpty
         ? _categoriesWithSubs
         : _categoryList
-            .map((c) => Map<String, dynamic>.from(c as Map))
-            .toList();
+              .map((c) => Map<String, dynamic>.from(c as Map))
+              .toList();
 
     if (source.isEmpty) {
       return SizedBox(
@@ -891,7 +912,7 @@ class _HomeScreenState extends State<HomeScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
-                padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 10.h),
+                padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 0.h),
                 child: Text(
                   cat['name']?.toString() ?? '',
                   style: GoogleFonts.jost(
@@ -932,11 +953,13 @@ class _HomeScreenState extends State<HomeScreen> {
                             height: 60.h,
                             width: double.infinity,
                             decoration: BoxDecoration(
-                              color: AppColors.primaryColor
-                                  .withValues(alpha: 0.07),
+                              color: AppColors.primaryColor.withValues(
+                                alpha: 0.07,
+                              ),
                               borderRadius: BorderRadius.circular(10.r),
                             ),
-                            child: sub['image'] != null &&
+                            child:
+                                sub['image'] != null &&
                                     sub['image'].toString().isNotEmpty
                                 ? ClipRRect(
                                     borderRadius: BorderRadius.circular(10.r),
@@ -1015,8 +1038,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     color: AppColors.primaryColor.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(12.r),
                   ),
-                  child: cat['image'] != null &&
-                          cat['image'].toString().isNotEmpty
+                  child:
+                      cat['image'] != null && cat['image'].toString().isNotEmpty
                       ? ClipRRect(
                           borderRadius: BorderRadius.circular(12.r),
                           child: Image.network(
@@ -1086,7 +1109,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // falling back to the global primary color.
     final headerColor =
         AppColors.fromHex(currentTab?['bg_color']?.toString()) ??
-            AppColors.primaryColor;
+        AppColors.primaryColor;
 
     return Scaffold(
       backgroundColor: AppColors.backgroundColor,
@@ -1160,8 +1183,11 @@ class _HomeScreenState extends State<HomeScreen> {
                               fontWeight: FontWeight.w600,
                             ),
                           ),
-                          Icon(Icons.flash_on_rounded,
-                              color: Colors.white, size: 14.sp),
+                          Icon(
+                            Icons.flash_on_rounded,
+                            color: Colors.white,
+                            size: 14.sp,
+                          ),
                         ],
                       ),
                       Text(
@@ -1186,7 +1212,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Container(
                       margin: EdgeInsets.only(right: 6.w),
                       padding: EdgeInsets.symmetric(
-                          horizontal: 10.w, vertical: 5.h),
+                        horizontal: 10.w,
+                        vertical: 5.h,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(20.r),
@@ -1194,8 +1222,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.location_on_rounded,
-                              color: Colors.white, size: 12.sp),
+                          Icon(
+                            Icons.location_on_rounded,
+                            color: Colors.white,
+                            size: 12.sp,
+                          ),
                           SizedBox(width: 3.w),
                           Text(
                             district.isNotEmpty ? district : 'Location',
@@ -1221,8 +1252,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         color: Colors.white.withValues(alpha: 0.2),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(Icons.person_rounded,
-                          color: Colors.white, size: 18.sp),
+                      child: Icon(
+                        Icons.person_rounded,
+                        color: Colors.white,
+                        size: 18.sp,
+                      ),
                     ),
                   ),
                 ],
@@ -1230,7 +1264,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 // Search bar + tab bar pinned at bottom
                 bottom: PreferredSize(
                   preferredSize: Size.fromHeight(
-                      _homeTabs.isNotEmpty ? 92.h : 42.h),
+                    _homeTabs.isNotEmpty ? 92.h : 42.h,
+                  ),
                   child: Container(
                     color: headerColor,
                     child: Column(
@@ -1243,28 +1278,33 @@ class _HomeScreenState extends State<HomeScreen> {
                             await Navigator.push(
                               context,
                               MaterialPageRoute(
-                                  builder: (_) => SearchProduct()),
+                                builder: (_) => SearchProduct(),
+                              ),
                             );
                           },
                           child: Container(
                             margin: EdgeInsets.symmetric(
-                                horizontal: 16.w, vertical: 6.h),
+                              horizontal: 16.w,
+                              vertical: 6.h,
+                            ),
                             height: 40.h,
                             decoration: BoxDecoration(
                               color: AppColors.backgroundColor,
                               borderRadius: BorderRadius.circular(12.r),
                               border: Border.all(
-                                  color: AppColors.searchBorderHome,
-                                  width: 1.5),
+                                color: AppColors.searchBorderHome,
+                                width: 1.5,
+                              ),
                             ),
                             child: Padding(
-                              padding:
-                                  EdgeInsets.symmetric(horizontal: 10.w),
+                              padding: EdgeInsets.symmetric(horizontal: 10.w),
                               child: Row(
                                 children: [
-                                  Icon(Icons.search,
-                                      size: 20.sp,
-                                      color: AppColors.hintTextColor),
+                                  Icon(
+                                    Icons.search,
+                                    size: 20.sp,
+                                    color: AppColors.hintTextColor,
+                                  ),
                                   SizedBox(width: 6.w),
                                   Expanded(
                                     child: Text(
@@ -1272,14 +1312,17 @@ class _HomeScreenState extends State<HomeScreen> {
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: GoogleFonts.jost(
-                                          fontSize: 14.sp,
-                                          fontWeight: FontWeight.w500,
-                                          color: AppColors.hintTextColor),
+                                        fontSize: 14.sp,
+                                        fontWeight: FontWeight.w500,
+                                        color: AppColors.hintTextColor,
+                                      ),
                                     ),
                                   ),
-                                  Icon(Icons.mic,
-                                      size: 18.sp,
-                                      color: AppColors.hintTextColor),
+                                  Icon(
+                                    Icons.mic,
+                                    size: 18.sp,
+                                    color: AppColors.hintTextColor,
+                                  ),
                                 ],
                               ),
                             ),
@@ -1303,7 +1346,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         height: 300.h,
                         child: Center(
                           child: CircularProgressIndicator(
-                              color: AppColors.primaryColor),
+                            color: AppColors.primaryColor,
+                          ),
                         ),
                       );
                     }
@@ -1335,7 +1379,7 @@ class _HomeScreenState extends State<HomeScreen> {
             AnimatedPositioned(
               duration: const Duration(milliseconds: 300),
               curve: Curves.slowMiddle,
-              bottom: 20.h,
+              bottom: MediaQuery.of(context).padding.bottom + 10.h,
               left: 110.w,
               right: 110.w,
               child: AnimatedOpacity(
@@ -1377,8 +1421,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: Text(
                                 cartList.length.toString(),
                                 style: GoogleFonts.poppins(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 14.sp),
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14.sp,
+                                ),
                               ),
                             ),
                           ),
@@ -1392,9 +1437,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
                           const Spacer(),
-                          Icon(Icons.arrow_forward_ios_outlined,
-                              color: AppColors.primaryTextColor,
-                              size: 16.sp),
+                          Icon(
+                            Icons.arrow_forward_ios_outlined,
+                            color: AppColors.primaryTextColor,
+                            size: 16.sp,
+                          ),
                         ],
                       ),
                     ),
@@ -1414,9 +1461,9 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SizedBox(height: 12.h),
+        SizedBox(height: 8.h),
         for (final s in _currentLayout) _buildLayoutSection(s as Map),
-        SizedBox(height: 24.h),
+        // SizedBox(height: 24.h),
       ],
     );
   }
@@ -1484,10 +1531,13 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         if ((s['title']?.toString() ?? '').isNotEmpty)
           Padding(
-            padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 10.h),
+            padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 8.h),
             child: Text(
               s['title'],
-              style: GoogleFonts.jost(fontSize: 15.sp, fontWeight: FontWeight.bold),
+              style: GoogleFonts.jost(
+                fontSize: 15.sp,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         Padding(
@@ -1497,9 +1547,9 @@ class _HomeScreenState extends State<HomeScreen> {
             physics: const NeverScrollableScrollPhysics(),
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 4,
-              childAspectRatio: 0.78,
+              childAspectRatio: 0.82,
               crossAxisSpacing: 8.w,
-              mainAxisSpacing: 8.h,
+              mainAxisSpacing: 10.h,
             ),
             itemCount: items.length,
             itemBuilder: (ctx, i) {
@@ -1529,23 +1579,32 @@ class _HomeScreenState extends State<HomeScreen> {
                           borderRadius: BorderRadius.circular(10.r),
                           image: img.isNotEmpty
                               ? DecorationImage(
-                                  image: NetworkImage(ApiConstants.imageUrl(img)),
-                                  fit: BoxFit.cover)
+                                  image: NetworkImage(
+                                    ApiConstants.imageUrl(img),
+                                  ),
+                                  fit: BoxFit.cover,
+                                )
                               : null,
                         ),
                         child: img.isEmpty
-                            ? Icon(Icons.category_outlined,
-                                color: AppColors.primaryColor, size: 22.sp)
+                            ? Icon(
+                                Icons.category_outlined,
+                                color: AppColors.primaryColor,
+                                size: 22.sp,
+                              )
                             : null,
                       ),
                     ),
-                    SizedBox(height: 4.h),
+                    // SizedBox(height: 4.h),
                     Text(
                       item['name']?.toString() ?? '',
                       textAlign: TextAlign.center,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.jost(fontSize: 10.sp, fontWeight: FontWeight.w500),
+                      style: GoogleFonts.jost(
+                        fontSize: 10.sp,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ],
                 ),
@@ -1566,10 +1625,13 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         if ((s['title']?.toString() ?? '').isNotEmpty)
           Padding(
-            padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 10.h),
+            padding: EdgeInsets.fromLTRB(16.w, 14.h, 16.w, 8.h),
             child: Text(
               s['title'],
-              style: GoogleFonts.jost(fontSize: 15.sp, fontWeight: FontWeight.bold),
+              style: GoogleFonts.jost(
+                fontSize: 15.sp,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         SizedBox(
@@ -1581,38 +1643,68 @@ class _HomeScreenState extends State<HomeScreen> {
             itemBuilder: (ctx, i) {
               final shop = items[i] as Map;
               final logo = shop['logo']?.toString() ?? '';
-              return Container(
-                width: 84.w,
-                margin: EdgeInsets.only(right: 10.w),
-                child: Column(
-                  children: [
-                    Container(
-                      width: 72.w,
-                      height: 72.w,
-                      decoration: BoxDecoration(
-                        color: AppColors.primaryColor.withValues(alpha: 0.08),
-                        shape: BoxShape.circle,
-                        border: Border.all(color: AppColors.lineColor),
-                        image: logo.isNotEmpty
-                            ? DecorationImage(
-                                image: NetworkImage(ApiConstants.imageUrl(logo)),
-                                fit: BoxFit.cover)
-                            : null,
+              return GestureDetector(
+                onTap: () {
+                  final id = int.tryParse('${shop['id'] ?? ''}');
+                  if (id == null) return;
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ShopDetailScreen(
+                        shopId: id,
+                        shopName: shop['shop_name']?.toString(),
+                        logo: logo,
                       ),
-                      child: logo.isEmpty
-                          ? Icon(Icons.storefront_rounded,
-                              color: AppColors.primaryColor, size: 28.sp)
-                          : null,
                     ),
-                    SizedBox(height: 5.h),
-                    Text(
-                      shop['shop_name']?.toString() ?? '',
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.jost(fontSize: 10.sp, fontWeight: FontWeight.w500),
-                    ),
-                  ],
+                  );
+                },
+                child: Container(
+                  width: 84.w,
+                  margin: EdgeInsets.only(right: 10.w),
+                  child: Column(
+                    children: [
+                      Hero(
+                        tag: 'shop-logo-${shop['id']}',
+                        child: Container(
+                          width: 72.w,
+                          height: 72.w,
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryColor.withValues(
+                              alpha: 0.08,
+                            ),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: AppColors.lineColor),
+                            image: logo.isNotEmpty
+                                ? DecorationImage(
+                                    image: NetworkImage(
+                                      ApiConstants.imageUrl(logo),
+                                    ),
+                                    fit: BoxFit.cover,
+                                  )
+                                : null,
+                          ),
+                          child: logo.isEmpty
+                              ? Icon(
+                                  Icons.storefront_rounded,
+                                  color: AppColors.primaryColor,
+                                  size: 28.sp,
+                                )
+                              : null,
+                        ),
+                      ),
+                      SizedBox(height: 5.h),
+                      Text(
+                        shop['shop_name']?.toString() ?? '',
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.jost(
+                          fontSize: 10.sp,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               );
             },
@@ -1648,7 +1740,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: InkWell(
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(20.r),
-                      child: item['banner_image'] != null &&
+                      child:
+                          item['banner_image'] != null &&
                               item['banner_image'].toString().isNotEmpty
                           ? Image.network(
                               item['banner_image'].toString(),
@@ -1718,7 +1811,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
-        SizedBox(height: 10.h),
+        SizedBox(height: 6.h),
 
         Padding(
           padding: const EdgeInsets.all(8.0),
@@ -1733,7 +1826,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisSpacing: 12.w,
                 childAspectRatio: 0.72,
               ),
-              itemCount: _categoryList.length > 8 ? 8 : _categoryList.length,
+              itemCount: _categoryList.length,
+              // itemCount: _categoryList.length > 8 ? 8 : _categoryList.length,
               itemBuilder: (context, index) {
                 final item = _categoryList[index];
                 return GestureDetector(
@@ -1759,7 +1853,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(10.r),
-                          child: item['image'] != null &&
+                          child:
+                              item['image'] != null &&
                                   item['image'].toString().isNotEmpty
                               ? Image.network(
                                   item['image'].toString(),
@@ -2068,7 +2163,7 @@ class _HomeScreenState extends State<HomeScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 10.h),
+          padding: EdgeInsets.fromLTRB(16.w, 14.h, 16.w, 4.h),
           child: Text(
             cat['name']?.toString() ?? '',
             style: GoogleFonts.jost(
@@ -2165,14 +2260,14 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
-        SizedBox(height: 10.h),
+        // SizedBox(height: 5.h),
         SizedBox(
-          height: 250.h,
+          height: 220.h,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             itemCount: list.length,
             itemBuilder: (ctx, i) => Padding(
-              padding: EdgeInsets.only(left: 16.w),
+              padding: EdgeInsets.only(left: 16.w, right: i == list.length - 1 ? 16.w : 0),
               child: SizedBox(
                 width: 110.w,
                 child: ProductCard(

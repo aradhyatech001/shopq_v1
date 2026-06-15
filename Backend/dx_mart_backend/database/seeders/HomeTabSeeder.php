@@ -18,7 +18,7 @@ class HomeTabSeeder extends Seeder
         $tabs = [
             ['name' => 'All',         'icon' => 'all',     'type' => 'all',      'category_id' => null,   'bg_color' => '#6C63FF', 'position' => 0],
             ['name' => 'Fresh',       'icon' => 'apple',   'type' => 'category', 'category_id' => $fresh, 'bg_color' => '#2DB87B', 'position' => 1],
-            ['name' => 'Daily Deals', 'icon' => 'deals',   'type' => 'none',     'category_id' => null,   'bg_color' => '#FF8C42', 'position' => 2],
+            ['name' => 'Deals', 'icon' => 'deals',   'type' => 'none',     'category_id' => null,   'bg_color' => '#FF8C42', 'position' => 2],
         ];
 
         foreach ($tabs as $tab) {

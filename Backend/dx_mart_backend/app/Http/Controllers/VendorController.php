@@ -3,10 +3,66 @@
 namespace App\Http\Controllers;
 
 use App\Models\Vendor;
+use App\Models\Product;
 use Illuminate\Http\Request;
 
 class VendorController extends Controller
 {
+    // ── GET /shop?vendor_id=X (public) ────────────────
+    // Public shop page for the user app: shop info + its active products.
+    public function publicShow(Request $request)
+    {
+        $id     = (int) $request->query('vendor_id', 0);
+        $vendor = Vendor::where('id', $id)->where('status', 'approved')->first();
+
+        if (!$vendor) {
+            return response()->json(['success' => false, 'message' => 'Shop not found']);
+        }
+
+        $products = Product::with(['category:id,name,image', 'subcategory:id,name', 'variants', 'info', 'highlights', 'images'])
+            ->where('vendor_id', $id)
+            ->where('is_active', 1)
+            ->orderByDesc('id')
+            ->get()
+            ->map(fn($p) => $this->formatProductCard($p));
+
+        return response()->json([
+            'success'  => true,
+            'shop'     => [
+                'id'               => $vendor->id,
+                'shop_name'        => $vendor->shop_name ?: $vendor->name,
+                'shop_description' => $vendor->shop_description,
+                'logo'             => $this->imageUrl($vendor->logo),
+                'product_count'    => $products->count(),
+            ],
+            'products' => $products,
+        ]);
+    }
+
+    /// Product shape consumed by the user app's ProductCard.
+    private function formatProductCard($p): array
+    {
+        $subId = $p->subcategory_id ?? null;
+        return [
+            'id'                 => $p->id,
+            'name'               => $p->name,
+            'description'        => $p->description,
+            'main_category_id'   => $p->main_category_id,
+            'main_category_name' => $p->category?->name,
+            'category_id'        => $p->main_category_id,
+            'category'           => $p->category?->name,
+            'subcategory_id'     => $subId,
+            'subcategory_name'   => $p->subcategory?->name,
+            'subcategory'        => $p->subcategory?->name ?? $p->category?->name,
+            'brand_id'           => $p->brand_id,
+            'types'              => $p->types,
+            'variants'           => $p->variants()->get()->toArray(),
+            'info'               => $p->info()->select('attribute', 'value')->get()->toArray(),
+            'highlights'         => $p->highlights()->select('attribute', 'value')->get()->toArray(),
+            'images'             => $p->images()->pluck('image_url')->map(fn($u) => $this->imageUrl($u))->toArray(),
+        ];
+    }
+
     // ── GET /admin/vendors?status=pending|approved|all ─
     public function index(Request $request)
     {
@@ -41,8 +97,9 @@ class VendorController extends Controller
     // ── POST /admin/vendors/approve ───────────────────
     public function approve(Request $request)
     {
-        $vendor = Vendor::find($request->input('id'));
-        if (!$vendor) return response()->json(['success' => false, 'message' => 'Vendor not found']);
+        $vendorId = (int) ($request->input('id') ?? $request->input('vendor_id') ?? 0);
+        $vendor = Vendor::find($vendorId);
+        if (!$vendor) return response()->json(['success' => false, 'message' => "Vendor #$vendorId not found"]);
 
         $vendor->update(['status' => 'approved', 'rejection_reason' => null]);
 
@@ -52,8 +109,9 @@ class VendorController extends Controller
     // ── POST /admin/vendors/reject ────────────────────
     public function reject(Request $request)
     {
-        $vendor = Vendor::find($request->input('id'));
-        if (!$vendor) return response()->json(['success' => false, 'message' => 'Vendor not found']);
+        $vendorId = (int) ($request->input('id') ?? $request->input('vendor_id') ?? 0);
+        $vendor = Vendor::find($vendorId);
+        if (!$vendor) return response()->json(['success' => false, 'message' => "Vendor #$vendorId not found"]);
 
         $vendor->update([
             'status'           => 'rejected',
@@ -66,8 +124,9 @@ class VendorController extends Controller
     // ── POST /admin/vendors/suspend ───────────────────
     public function suspend(Request $request)
     {
-        $vendor = Vendor::find($request->input('id'));
-        if (!$vendor) return response()->json(['success' => false, 'message' => 'Vendor not found']);
+        $vendorId = (int) ($request->input('id') ?? $request->input('vendor_id') ?? 0);
+        $vendor = Vendor::find($vendorId);
+        if (!$vendor) return response()->json(['success' => false, 'message' => "Vendor #$vendorId not found"]);
 
         $vendor->update(['status' => 'suspended']);
 
@@ -77,8 +136,9 @@ class VendorController extends Controller
     // ── POST /admin/vendors/delete ────────────────────
     public function delete(Request $request)
     {
-        $vendor = Vendor::find($request->input('id'));
-        if (!$vendor) return response()->json(['success' => false, 'message' => 'Vendor not found']);
+        $vendorId = (int) ($request->input('id') ?? $request->input('vendor_id') ?? 0);
+        $vendor = Vendor::find($vendorId);
+        if (!$vendor) return response()->json(['success' => false, 'message' => "Vendor #$vendorId not found"]);
 
         $vendor->delete();
 

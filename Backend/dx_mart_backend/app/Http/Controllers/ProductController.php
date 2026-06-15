@@ -96,7 +96,7 @@ class ProductController extends Controller
         $search     = $request->query('search', '');
         $categoryId = $request->query('category_id');
 
-        $query = Product::with(['category:id,name', 'subcategory:id,name', 'variants', 'info', 'highlights', 'images']);
+        $query = Product::with(['category:id,name', 'subcategory:id,name', 'variants', 'info', 'highlights', 'images'])->visible();
         if ($search) {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%$search%")->orWhere('description', 'like', "%$search%");
@@ -140,7 +140,7 @@ class ProductController extends Controller
         $hasSubNew = Schema::hasColumn('products', 'subcategory_id');
         $hasSubOld = Schema::hasColumn('products', 'sub_category_id');
 
-        $query = Product::with(['category:id,name,image', 'subcategory:id,name', 'variants', 'info', 'highlights', 'images']);
+        $query = Product::with(['category:id,name,image', 'subcategory:id,name', 'variants', 'info', 'highlights', 'images'])->visible();
 
         // category_id=0 or missing = no category filter (used for deals/all-products tabs)
         if ($categoryId > 0) {
@@ -172,7 +172,7 @@ class ProductController extends Controller
         $limit  = max(1, (int) $request->query('limit', 10));
         $type   = $request->query('type', '');
 
-        $query = Product::with(['category:id,name,image', 'variants', 'info', 'highlights', 'images']);
+        $query = Product::with(['category:id,name,image', 'variants', 'info', 'highlights', 'images'])->visible();
         if ($type) $query->whereRaw("FIND_IN_SET(?, types)", [$type]);
 
         $total    = $query->count();
@@ -190,7 +190,7 @@ class ProductController extends Controller
             return response()->json(['success' => false, 'message' => 'subcategory_id or category_id required'], 400);
         }
 
-        $query = Product::with(['category:id,name,image', 'variants', 'info', 'highlights', 'images']);
+        $query = Product::with(['category:id,name,image', 'variants', 'info', 'highlights', 'images'])->visible();
         if ($subcategoryId > 0 && Schema::hasColumn('products', 'subcategory_id')) {
             $query->where('subcategory_id', $subcategoryId);
         } elseif ($categoryId > 0) {
@@ -209,7 +209,7 @@ class ProductController extends Controller
     {
         $id = $request->query('product_id');
         if (!$id) return response()->json(['success' => false, 'message' => 'Missing product_id']);
-        $product = Product::find($id);
+        $product = Product::visible()->find($id);
         if (!$product) return response()->json(['success' => false, 'message' => 'Product not found']);
         return response()->json(['success' => true, 'product' => $this->buildProductResponse($product)]);
     }
@@ -283,11 +283,11 @@ class ProductController extends Controller
             }
             return $url;
         }, $data['images'] ?? []);
-        $toDelete = array_diff($existingImages, $incoming);
-        foreach ($toDelete as $url) {
-            ProductImage::where('product_id', $productId)->where('image_url', $url)->delete();
-            Storage::disk('public')->delete($url);
-        }
+        // $toDelete = array_diff($existingImages, $incoming);
+        // foreach ($toDelete as $url) {
+        //     ProductImage::where('product_id', $productId)->where('image_url', $url)->delete();
+        //     Storage::disk('public')->delete($url);
+        // }
 
         return response()->json(['success' => true, 'message' => 'Product updated successfully']);
     }
@@ -345,7 +345,7 @@ class ProductController extends Controller
         $productId = $request->input('product_id');
         $file      = $request->file('image');
         $fileName  = uniqid() . '_' . $file->getClientOriginalName();
-        $path      = $file->storeAs('uploads', $fileName, 'public');
+        $path      = $file->storeAs('products', $fileName, 'public');
 
         ProductImage::create(['product_id' => $productId, 'image_url' => $path]);
         return response()->json(['success' => true, 'image_url' => $path]);

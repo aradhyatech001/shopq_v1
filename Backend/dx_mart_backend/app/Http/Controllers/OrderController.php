@@ -32,6 +32,18 @@ class OrderController extends Controller
         $userName       = $data['user_name'] ?? null;
 
         if (!$userId) return response()->json(['success' => false, 'message' => 'User ID missing']);
+        if (!\App\Models\User::whereKey($userId)->exists()) {
+            return response()->json(['success' => false, 'code' => 'invalid_user', 'message' => 'Session expired. Please log in again.']);
+        }
+
+        // Validate the delivery address (orders.location_id has an FK to
+        // delivery_address). A stale/missing address id would 500 otherwise.
+        $validAddress = $locationId
+            ? DeliveryAddress::where('id', $locationId)->where('user_id', $userId)->exists()
+            : false;
+        if (!$validAddress) {
+            return response()->json(['success' => false, 'code' => 'no_address', 'message' => 'Please select a delivery address.']);
+        }
 
         // Fetch cart — LEFT JOIN so items without a variant (or null variant_id) are included
         $cartItems = DB::select("

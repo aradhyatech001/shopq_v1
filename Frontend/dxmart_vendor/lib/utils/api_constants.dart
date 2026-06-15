@@ -3,6 +3,8 @@ class ApiConstants {
   // static const String BASE_IMAGE_URL = "http://192.168.1.5:8000/storage/";
   static const String BASE_URL       = "http://localhost:8000/api";
   static const String BASE_IMAGE_URL = "http://localhost:8000/storage/";
+  // static const String BASE_URL       = "https://shopq.solarsunshakti.com/api";
+  // static const String BASE_IMAGE_URL = "https://shopq.solarsunshakti.com/storage/";
 
   // ── Vendor Auth ────────────────────────────────────
   static const String VENDOR_REGISTER       = "$BASE_URL/vendor/register";
