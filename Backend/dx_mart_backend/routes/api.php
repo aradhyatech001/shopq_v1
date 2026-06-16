@@ -23,6 +23,7 @@ use App\Http\Controllers\SubscriptionPlanController;
 use App\Http\Controllers\PincodeController;
 use App\Http\Controllers\AppConfigController;
 use App\Http\Controllers\HomeSectionController;
+use App\Http\Controllers\DeliveryController;
 
 // ─────────────────────────────────────────────
 // PUBLIC ROUTES
@@ -110,6 +111,9 @@ Route::post('/wishlist/remove',       [WishlistController::class, 'remove']);
 // Vendor Auth (public)
 Route::post('/vendor/register',       [VendorAuthController::class, 'register']);
 Route::post('/vendor/login',          [VendorAuthController::class, 'login']);
+
+// Delivery boy auth (public)
+Route::post('/delivery/login',        [DeliveryController::class, 'login']);
 
 // Public shop page (user app) — shop info + its products
 Route::get('/shop',                   [VendorController::class, 'publicShow']);
@@ -257,6 +261,12 @@ Route::middleware('auth:admin')->group(function () {
     Route::get('/orders/delivery',             [OrderController::class, 'fetchDeliveryOrders']);
     Route::get('/delivery-boys',               [OrderController::class, 'getDeliveryBoys']);
 
+    // Delivery boy management (admin owns the platform pool)
+    Route::get('/admin/delivery-boys',         [DeliveryController::class, 'adminIndex']);
+    Route::post('/admin/delivery-boys/add',    [DeliveryController::class, 'adminStore']);
+    Route::post('/admin/delivery-boys/edit',   [DeliveryController::class, 'adminUpdate']);
+    Route::post('/admin/delivery-boys/delete', [DeliveryController::class, 'adminDestroy']);
+
     // Vendor management
     Route::get('/admin/vendors',               [VendorController::class, 'index']);
     Route::get('/admin/vendors/stats',         [VendorController::class, 'stats']);
@@ -312,6 +322,24 @@ Route::middleware('auth:vendor')->group(function () {
     Route::post('/vendor/products/highlight',    [VendorProductController::class, 'saveHighlight']);
     Route::post('/vendor/products/info',         [VendorProductController::class, 'saveInfo']);
 
+    Route::get('/vendor/dashboard',              [VendorProductController::class, 'dashboard']);
     Route::get('/vendor/orders',                 [VendorProductController::class, 'orders']);
     Route::post('/vendor/orders/update-status',  [VendorProductController::class, 'updateOrderStatus']);
+    Route::post('/vendor/orders/assign-delivery',[VendorProductController::class, 'assignDelivery']);
+    Route::get('/vendor/delivery-boys',          [VendorProductController::class, 'deliveryBoys']);
+    Route::get('/vendor/delivery-boys/mine',     [VendorProductController::class, 'myDeliveryBoys']);
+    Route::post('/vendor/delivery-boys/add',     [VendorProductController::class, 'addDeliveryBoy']);
+    Route::post('/vendor/delivery-boys/edit',    [VendorProductController::class, 'editDeliveryBoy']);
+    Route::post('/vendor/delivery-boys/delete',  [VendorProductController::class, 'deleteDeliveryBoy']);
+});
+
+// ─────────────────────────────────────────────
+// DELIVERY BOY AUTHENTICATED ROUTES (Sanctum — delivery guard)
+// ─────────────────────────────────────────────
+
+Route::middleware('auth:delivery')->group(function () {
+    Route::post('/delivery/logout',              [DeliveryController::class, 'logout']);
+    Route::get('/delivery/profile',              [DeliveryController::class, 'profile']);
+    Route::get('/delivery/orders',               [DeliveryController::class, 'orders']);
+    Route::post('/delivery/orders/update-status',[DeliveryController::class, 'updateStatus']);
 });

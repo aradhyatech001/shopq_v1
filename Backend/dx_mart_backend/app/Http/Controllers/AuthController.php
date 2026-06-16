@@ -11,14 +11,26 @@ class AuthController extends Controller
 {
     public function signup(Request $request)
     {
-        $email = $request->input('email');
-        if (User::where('email', $email)->exists()) {
-            return response()->json(['status' => 'error', 'message' => 'Email already registered']);
+        // Normalise so the same address can't register twice with different
+        // case/whitespace, and so it always matches at login time.
+        $email    = strtolower(trim($request->input('email', '')));
+        $name     = trim($request->input('name', ''));
+        $password = $request->input('password', '');
+
+        if (!$name || !$email || !$password) {
+            return response()->json(['status' => 'error', 'message' => 'Name, email and password are required'], 422);
         }
-        $user = User::create([
-            'name'      => $request->input('name'),
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return response()->json(['status' => 'error', 'message' => 'Please enter a valid email'], 422);
+        }
+        if (User::whereRaw('LOWER(email) = ?', [$email])->exists()) {
+            return response()->json(['status' => 'error', 'message' => 'Email already registered'], 409);
+        }
+
+        User::create([
+            'name'      => $name,
             'email'     => $email,
-            'password'  => Hash::make($request->input('password')),
+            'password'  => Hash::make($password),
             'status'    => 'active',
             'date_time' => $request->input('date_time'),
         ]);
@@ -27,27 +39,39 @@ class AuthController extends Controller
 
     public function login(Request $request)
     {
-        $user = User::where('email', $request->input('email'))->first();
-        if ($user && Hash::check($request->input('password'), $user->password)) {
-            $token = $user->createToken('auth_token')->plainTextToken;
-            return response()->json([
-                'status'  => 'success',
-                'message' => 'Login Successful',
-                'token'   => $token,
-                'user'    => $user,
-            ]);
+        $email    = strtolower(trim($request->input('email', '')));
+        $password = $request->input('password', '');
+
+        if (!$email || !$password) {
+            return response()->json(['status' => 'error', 'message' => 'Email and password are required'], 422);
         }
-        return response()->json(['status' => 'error', 'message' => 'Invalid Email or Password']);
+
+        // Case-insensitive lookup so historic mixed-case rows still match.
+        $user = User::whereRaw('LOWER(email) = ?', [$email])->first();
+        if (!$user || !Hash::check($password, $user->password)) {
+            return response()->json(['status' => 'error', 'message' => 'Invalid Email or Password'], 401);
+        }
+        if (strtolower((string) $user->status) === 'inactive' || strtolower((string) $user->status) === 'blocked') {
+            return response()->json(['status' => 'error', 'message' => 'Your account is blocked. Contact support.'], 403);
+        }
+
+        $token = $user->createToken('auth_token')->plainTextToken;
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Login Successful',
+            'token'   => $token,
+            'user'    => $user,
+        ]);
     }
 
     public function getUser(Request $request)
     {
-        $email = $request->query('email');
-        $user  = User::where('email', $email)->first();
+        $email = strtolower(trim($request->query('email', '')));
+        $user  = User::whereRaw('LOWER(email) = ?', [$email])->first();
         if ($user) {
             return response()->json(['status' => 'success', 'user' => $user]);
         }
-        return response()->json(['status' => 'error', 'message' => 'User not found']);
+        return response()->json(['status' => 'error', 'message' => 'User not found'], 404);
     }
 
     public function getAllUsers(Request $request)
@@ -92,9 +116,9 @@ class AuthController extends Controller
 
     public function forgotPassword(Request $request)
     {
-        $email = $request->input('email');
-        if (!User::where('email', $email)->exists()) {
-            return response()->json(['status' => 'error', 'message' => 'Email not registered']);
+        $email = strtolower(trim($request->input('email', '')));
+        if (!User::whereRaw('LOWER(email) = ?', [$email])->exists()) {
+            return response()->json(['status' => 'error', 'message' => 'Email not registered'], 404);
         }
         $otp    = rand(100000, 999999);
         $expiry = time() + 300;
@@ -111,20 +135,26 @@ class AuthController extends Controller
 
     public function verifyOtp(Request $request)
     {
-        $email = $request->input('email');
+        $email = strtolower(trim($request->input('email', '')));
         $otp   = $request->input('otp');
         $valid = OtpTable::where('email', $email)->where('otp', $otp)->where('expiry', '>', time())->exists();
         if ($valid) {
             return response()->json(['status' => 'success', 'message' => 'OTP Verified']);
         }
-        return response()->json(['status' => 'error', 'message' => 'Invalid or Expired OTP']);
+        return response()->json(['status' => 'error', 'message' => 'Invalid or Expired OTP'], 422);
     }
 
     public function resetPassword(Request $request)
     {
-        $email    = $request->input('email');
-        $password = Hash::make($request->input('new_password'));
-        User::where('email', $email)->update(['password' => $password]);
+        $email    = strtolower(trim($request->input('email', '')));
+        $newPass  = $request->input('new_password', '');
+        if (!$email || strlen($newPass) < 4) {
+            return response()->json(['status' => 'error', 'message' => 'A valid email and a password of at least 4 characters are required'], 422);
+        }
+        $affected = User::whereRaw('LOWER(email) = ?', [$email])->update(['password' => Hash::make($newPass)]);
+        if (!$affected) {
+            return response()->json(['status' => 'error', 'message' => 'Email not registered'], 404);
+        }
         return response()->json(['status' => 'success', 'message' => 'Password Updated']);
     }
 

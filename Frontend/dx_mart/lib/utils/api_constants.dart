@@ -5,8 +5,8 @@ class ApiConstants {
   // iOS Simulator     → http://localhost:8000/api  (works on iOS only)
   // Run: ipconfig (Windows) or ifconfig (Mac/Linux) to find your WiFi IP
   // ─────────────────────────────────────────────────────────────────────────
-  static const String BASE_URL = "http://192.168.1.5:8000/api"; // Android emulator
-  static const String BASE_IMAGE_URL = "http://192.168.1.5:8000/storage/";
+  static const String BASE_URL = "http://192.168.1.4:8000/api"; // Android emulator
+  static const String BASE_IMAGE_URL = "http://192.168.1.4:8000/storage/";
   // static const String BASE_URL = "https://shopq.solarsunshakti.com/api"; // Android emulator
   // static const String BASE_IMAGE_URL = "https://shopq.solarsunshakti.com/storage/";
   // static const String BASE_URL = "http://localhost:8000/api"; // Android emulator

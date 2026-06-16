@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -174,6 +175,27 @@ class _SettingScreenState extends State<SettingScreen> {
 
   void _showEditDialog(int idx) {
     final ctrl = TextEditingController(text: _values[idx] ?? '');
+    final item = _items[idx];
+
+    // Choose keyboard + limits based on what the setting holds.
+    final isPhone  = item.label.toLowerCase().contains('number');
+    final isAmount = item.prefix == '₹';
+    final isEmail  = item.label.toLowerCase().contains('email');
+
+    TextInputType keyboardType = TextInputType.text;
+    List<TextInputFormatter>? formatters;
+    int? maxLength;
+    if (isPhone) {
+      keyboardType = TextInputType.phone;
+      formatters = [FilteringTextInputFormatter.digitsOnly];
+      maxLength = 10;
+    } else if (isAmount) {
+      keyboardType = const TextInputType.numberWithOptions(decimal: true);
+      formatters = [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))];
+    } else if (isEmail) {
+      keyboardType = TextInputType.emailAddress;
+    }
+
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -181,18 +203,20 @@ class _SettingScreenState extends State<SettingScreen> {
           borderRadius: BorderRadius.circular(16.r),
         ),
         title: Text(
-          'Edit ${_items[idx].label}',
+          'Edit ${item.label}',
           style: GoogleFonts.jost(fontWeight: FontWeight.w700),
         ),
         content: TextField(
           controller: ctrl,
           autofocus: true,
+          keyboardType: keyboardType,
+          inputFormatters: formatters,
+          maxLength: maxLength,
           style: GoogleFonts.jost(fontSize: 14.sp),
           decoration: InputDecoration(
+            counterText: '',
             hintText: 'Enter new value',
-            prefixText: _items[idx].prefix.isNotEmpty
-                ? _items[idx].prefix
-                : null,
+            prefixText: item.prefix.isNotEmpty ? item.prefix : null,
           ),
           onSubmitted: (v) {
             Navigator.pop(context);

@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../utils/api_constants.dart';
 import '../utils/colors.dart';
 import '../utils/vendor_api_helper.dart';
+import '../utils/vendor_widgets.dart';
 
 class SubscriptionScreen extends StatefulWidget {
   const SubscriptionScreen({super.key});
@@ -81,70 +82,36 @@ class _SubscriptionScreenState extends State<SubscriptionScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Column(
+    return VendorPage(
+      title: 'Subscription',
+      subtitle: _activeSub != null
+          ? '${_activeSub!['plan_name']} · ${_activeSub!['days_remaining']} days left'
+          : 'No active plan',
+      actions: [
+        IconButton(
+          tooltip: 'Refresh',
+          onPressed: _load,
+          icon: Icon(Icons.refresh_rounded, size: 20.sp, color: AppColors.textSecondary),
+        ),
+      ],
+      child: Column(
         children: [
-          // ── Page header ──────────────────────────────────────
           Container(
             color: AppColors.surface,
-            padding: EdgeInsets.fromLTRB(20.w, 20.h, 20.w, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Subscription',
-                              style: GoogleFonts.jost(
-                                  fontSize: 22.sp,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textPrimary)),
-                          Text(
-                            _activeSub != null
-                                ? '${_activeSub!['plan_name']} · ${_activeSub!['days_remaining']} days left'
-                                : 'No active plan',
-                            style: GoogleFonts.jost(
-                                fontSize: 13.sp,
-                                color: _activeSub != null
-                                    ? AppColors.success
-                                    : AppColors.warning),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: _load,
-                      icon: const Icon(Icons.refresh_rounded,
-                          color: AppColors.textSecondary),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 12.h),
-                // Tab bar
-                TabBar(
-                  controller: _tabCtrl,
-                  labelColor: AppColors.primary,
-                  unselectedLabelColor: AppColors.textSecondary,
-                  indicatorColor: AppColors.primary,
-                  indicatorWeight: 2,
-                  labelStyle: GoogleFonts.jost(
-                      fontWeight: FontWeight.w600, fontSize: 13.sp),
-                  unselectedLabelStyle:
-                      GoogleFonts.jost(fontSize: 13.sp),
-                  tabs: const [
-                    Tab(text: 'Available Plans'),
-                    Tab(text: 'My Subscription'),
-                  ],
-                ),
+            child: TabBar(
+              controller: _tabCtrl,
+              labelColor: AppColors.primary,
+              unselectedLabelColor: AppColors.textSecondary,
+              indicatorColor: AppColors.primary,
+              indicatorWeight: 2,
+              labelStyle: GoogleFonts.jost(fontWeight: FontWeight.w600, fontSize: 13.sp),
+              unselectedLabelStyle: GoogleFonts.jost(fontSize: 13.sp),
+              tabs: const [
+                Tab(text: 'Available Plans'),
+                Tab(text: 'My Subscription'),
               ],
             ),
           ),
-
-          // ── Body ─────────────────────────────────────────────
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())

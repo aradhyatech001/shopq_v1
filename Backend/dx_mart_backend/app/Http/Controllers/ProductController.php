@@ -283,11 +283,18 @@ class ProductController extends Controller
             }
             return $url;
         }, $data['images'] ?? []);
-        // $toDelete = array_diff($existingImages, $incoming);
-        // foreach ($toDelete as $url) {
-        //     ProductImage::where('product_id', $productId)->where('image_url', $url)->delete();
-        //     Storage::disk('public')->delete($url);
-        // }
+        // Only reconcile images when the client actually sent an `images` list.
+        // (Without this guard, an update payload that omits images would treat
+        // the incoming list as empty and delete every image of the product.)
+        // Whatever the frontend keeps stays; anything it dropped gets removed
+        // from the DB and disk. New images are added separately via uploadImage.
+        if (array_key_exists('images', $data)) {
+            $toDelete = array_diff($existingImages, $incoming);
+            foreach ($toDelete as $url) {
+                ProductImage::where('product_id', $productId)->where('image_url', $url)->delete();
+                Storage::disk('public')->delete($url);
+            }
+        }
 
         return response()->json(['success' => true, 'message' => 'Product updated successfully']);
     }

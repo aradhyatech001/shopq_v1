@@ -33,9 +33,18 @@ class ApiConstants {
   static const String VENDOR_PRODUCT_IMAGE  = "$BASE_URL/vendor/products/upload-image";
   static const String VENDOR_PRODUCT_STOCK  = "$BASE_URL/vendor/products/update-stock";
 
+  // ── Dashboard ──────────────────────────────────────
+  static const String VENDOR_DASHBOARD           = "$BASE_URL/vendor/dashboard";
+
   // ── Orders ─────────────────────────────────────────
-  static const String VENDOR_ORDERS              = "$BASE_URL/vendor/orders";
-  static const String VENDOR_ORDER_UPDATE_STATUS = "$BASE_URL/vendor/orders/update-status";
+  static const String VENDOR_ORDERS               = "$BASE_URL/vendor/orders";
+  static const String VENDOR_ORDER_UPDATE_STATUS  = "$BASE_URL/vendor/orders/update-status";
+  static const String VENDOR_ORDER_ASSIGN_DELIVERY= "$BASE_URL/vendor/orders/assign-delivery";
+  static const String VENDOR_DELIVERY_BOYS        = "$BASE_URL/vendor/delivery-boys";
+  static const String VENDOR_DELIVERY_BOYS_MINE   = "$BASE_URL/vendor/delivery-boys/mine";
+  static const String VENDOR_DELIVERY_BOYS_ADD    = "$BASE_URL/vendor/delivery-boys/add";
+  static const String VENDOR_DELIVERY_BOYS_EDIT   = "$BASE_URL/vendor/delivery-boys/edit";
+  static const String VENDOR_DELIVERY_BOYS_DELETE = "$BASE_URL/vendor/delivery-boys/delete";
 
   // ── Categories (for product form) ─────────────────
   static const String CATEGORIES            = "$BASE_URL/categories";

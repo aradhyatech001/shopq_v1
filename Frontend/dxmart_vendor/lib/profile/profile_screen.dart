@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -10,6 +11,7 @@ import '../subscription/subscription_screen.dart';
 import '../utils/api_constants.dart';
 import '../utils/colors.dart';
 import '../utils/vendor_api_helper.dart';
+import '../utils/vendor_widgets.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -84,9 +86,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final logoUrl = _vendor?['logo']?.toString() ?? '';
     final status  = _vendor?['status'] ?? '';
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SingleChildScrollView(
+    return VendorPage(
+      title: 'Profile',
+      actions: [
+        IconButton(
+          onPressed: _load,
+          icon: Icon(Icons.refresh_rounded, size: 20.sp, color: AppColors.textSecondary),
+        ),
+        IconButton(
+          onPressed: _editProfile,
+          tooltip: 'Edit Profile',
+          icon: Icon(Icons.edit_outlined, size: 20.sp, color: AppColors.primary),
+        ),
+      ],
+      child: SingleChildScrollView(
         child: Column(
           children: [
             // ── Profile banner ─────────────────────────────────
@@ -94,45 +107,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               color: AppColors.surface,
               child: Column(
                 children: [
-                  // Top actions row
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(8.w, 12.h, 8.w, 0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Padding(
-                          padding: EdgeInsets.only(left: 12.w),
-                          child: Text(
-                            'Profile',
-                            style: GoogleFonts.jost(
-                              fontSize: 22.sp,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                        ),
-                        Row(
-                          children: [
-                            IconButton(
-                              onPressed: _load,
-                              icon: const Icon(Icons.refresh_rounded,
-                                  color: AppColors.textSecondary),
-                            ),
-                            IconButton(
-                              onPressed: _editProfile,
-                              icon: const Icon(Icons.edit_outlined,
-                                  color: AppColors.primary),
-                              tooltip: 'Edit Profile',
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-
                   // Avatar + info
                   Padding(
-                    padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 20.h),
+                    padding: EdgeInsets.fromLTRB(20.w, 20.h, 20.w, 20.h),
                     child: Row(
                       children: [
                         // Avatar
@@ -613,7 +590,9 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
                 controller: _phoneCtrl,
                 style: GoogleFonts.jost(),
                 keyboardType: TextInputType.phone,
-                decoration: _deco('Phone')),
+                maxLength: 10,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                decoration: _deco('Phone').copyWith(counterText: '')),
             SizedBox(height: 12.h),
             TextFormField(
                 controller: _shopNameCtrl,

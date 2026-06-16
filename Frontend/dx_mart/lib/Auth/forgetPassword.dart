@@ -1,5 +1,6 @@
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -188,6 +189,10 @@ class _ForgetPasswordState extends State<ForgetPassword> {
                           controller: otpController,
                           hintText: "Enter OTP",
                           keyboardType: TextInputType.number,
+                          maxLength: 6,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
                           preFixIcon:
                               'assets/svg/otp.svg', // Add OTP icon if available
                         ),

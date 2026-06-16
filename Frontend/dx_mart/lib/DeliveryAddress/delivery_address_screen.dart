@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -614,6 +615,8 @@ class _DeliveryAddressScreenState extends State<DeliveryAddressScreen> {
                 icon: 'assets/svg/phone.svg',
                 hint: 'Mobile no.',
                 keyboardType: TextInputType.phone,
+                maxLength: 10,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               ),
               SizedBox(height: 12.h),
               _buildTextField(
@@ -627,6 +630,8 @@ class _DeliveryAddressScreenState extends State<DeliveryAddressScreen> {
                 icon: 'assets/svg/pincode.svg',
                 hint: 'Pin code',
                 keyboardType: TextInputType.number,
+                maxLength: 6,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               ),
               SizedBox(height: 12.h),
               _buildTextField(
@@ -671,6 +676,8 @@ class _DeliveryAddressScreenState extends State<DeliveryAddressScreen> {
     String? hint,
     required TextEditingController controller,
     TextInputType keyboardType = TextInputType.text,
+    int? maxLength,
+    List<TextInputFormatter>? inputFormatters,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -687,7 +694,10 @@ class _DeliveryAddressScreenState extends State<DeliveryAddressScreen> {
       child: TextFormField(
         controller: controller,
         keyboardType: keyboardType,
+        maxLength: maxLength,
+        inputFormatters: inputFormatters,
         decoration: InputDecoration(
+          counterText: '',
           hintStyle: GoogleFonts.jost(color: Colors.grey, fontSize: 16.sp),
           prefixIcon: Padding(
             padding: EdgeInsets.all(12.w),

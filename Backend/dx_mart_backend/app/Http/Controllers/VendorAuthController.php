@@ -63,17 +63,17 @@ class VendorAuthController extends Controller
         $password = $request->input('password', '');
 
         if (!$email || !$password) {
-            return response()->json(['success' => false, 'message' => 'Email and password required']);
+            return response()->json(['success' => false, 'message' => 'Email and password required'], 422);
         }
 
-        $vendor = Vendor::where('email', $email)->first();
+        $vendor = Vendor::whereRaw('LOWER(email) = ?', [$email])->first();
 
         if (!$vendor || !Hash::check($password, $vendor->password)) {
-            return response()->json(['success' => false, 'message' => 'Invalid credentials']);
+            return response()->json(['success' => false, 'message' => 'Invalid credentials'], 401);
         }
 
         if ($vendor->status === 'pending') {
-            return response()->json(['success' => false, 'message' => 'Your account is pending admin approval', 'status' => 'pending']);
+            return response()->json(['success' => false, 'message' => 'Your account is pending admin approval', 'status' => 'pending'], 403);
         }
 
         if ($vendor->status === 'rejected') {
@@ -81,11 +81,11 @@ class VendorAuthController extends Controller
                 'success' => false,
                 'message' => 'Account rejected: ' . ($vendor->rejection_reason ?? 'Contact admin'),
                 'status'  => 'rejected',
-            ]);
+            ], 403);
         }
 
         if ($vendor->status === 'suspended') {
-            return response()->json(['success' => false, 'message' => 'Account suspended. Contact admin.', 'status' => 'suspended']);
+            return response()->json(['success' => false, 'message' => 'Account suspended. Contact admin.', 'status' => 'suspended'], 403);
         }
 
         // Revoke old tokens

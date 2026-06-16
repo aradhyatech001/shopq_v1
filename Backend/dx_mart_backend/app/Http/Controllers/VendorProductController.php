@@ -325,62 +325,215 @@ class VendorProductController extends Controller
     }
 
     // ── GET /vendor/orders ────────────────────────────
+    // Returns this vendor's SUB-orders only (each vendor sees just their shop).
     public function orders(Request $request)
     {
         $vendor = $request->user();
 
-        // Get orders that contain at least one product belonging to this vendor
-        $orders = \App\Models\Order::with(['items.product', 'user:id,name,email'])
-            ->whereHas('items', function ($q) use ($vendor) {
-                $q->whereHas('product', fn($pq) => $pq->where('vendor_id', $vendor->id));
-            })
+        $orders = \App\Models\VendorOrder::with([
+                'parent.user:id,name,email', 'parent.address',
+                'items.product:id,name', 'items.product.images:id,product_id,image_url',
+                'items.variant:id,name,price,selling_price',
+            ])
+            ->where('vendor_id', $vendor->id)
             ->orderByDesc('id')
             ->get()
-            ->map(function ($order) use ($vendor) {
-                // Only include items for this vendor
-                $vendorItems = $order->items->filter(
-                    fn($item) => $item->product?->vendor_id == $vendor->id
-                );
+            ->map(function ($vo) {
+                $addr = $vo->parent?->address;
                 return [
-                    'id'           => $order->id,
-                    'status'       => $order->status,
-                    'total'        => $vendorItems->sum(fn($i) => $i->price * $i->quantity),
-                    'created_at'   => $order->order_datetime,
-                    'user'         => ['name' => $order->user?->name, 'email' => $order->user?->email],
-                    'items'        => $vendorItems->map(fn($i) => [
-                        'product_name' => $i->product?->name,
-                        'quantity'     => $i->quantity,
-                        'price'        => $i->price,
-                    ])->values()->toArray(),
+                    'id'              => $vo->id,                 // sub-order id
+                    'parent_order_id' => $vo->parent_order_id,
+                    'status'          => $vo->status,
+                    'total'           => (float) $vo->items_subtotal,
+                    'tracking_number' => $vo->tracking_number,
+                    'courier_name'    => $vo->courier_name,
+                    'delivery_boy_id' => $vo->delivery_boy_id,
+                    'created_at'      => $vo->parent?->order_datetime,
+                    'user'            => ['name' => $vo->parent?->user?->name, 'email' => $vo->parent?->user?->email],
+                    'address'         => $addr ? [
+                        'name' => $addr->name, 'phone' => $addr->phone,
+                        'full_address' => $addr->full_address, 'pin_code' => $addr->pin_code,
+                    ] : null,
+                    'items'           => $vo->items->map(function ($i) {
+                        // `price` = selling price locked at order time. `mrp` = the
+                        // variant's original price for the strike-through + discount.
+                        $unit  = (float) $i->price;
+                        $mrp   = (float) ($i->variant?->price ?? 0);
+                        $disc  = ($mrp > $unit && $mrp > 0) ? round(($mrp - $unit) / $mrp * 100) : 0;
+                        return [
+                            'product_name' => $i->product?->name,
+                            'variant_name' => $i->variant?->name,
+                            'quantity'     => $i->quantity,
+                            'price'        => $unit,                 // selling, per unit
+                            'mrp'          => $mrp,                  // original, per unit
+                            'discount'     => $disc,                 // % off
+                            'line_total'   => $unit * (int) $i->quantity,
+                            'image'        => $this->imageUrl($i->product?->images?->first()?->image_url),
+                        ];
+                    })->values()->toArray(),
                 ];
             });
 
         return response()->json(['success' => true, 'orders' => $orders]);
     }
 
-    // ── POST /vendor/orders/update-status ─────────────
-    public function updateOrderStatus(Request $request)
+    /// Resolve the caller's own sub-order from a vendor_order id OR a parent order id.
+    private function resolveVendorOrder($vendor, int $id): ?\App\Models\VendorOrder
     {
-        $vendor   = $request->user();
-        $orderId  = (int) $request->input('order_id');
-        $status   = (string) $request->input('status');
+        return \App\Models\VendorOrder::where('vendor_id', $vendor->id)
+            ->where(fn($q) => $q->where('id', $id)->orWhere('parent_order_id', $id))
+            ->first();
+    }
 
-        $allowed = ['pending', 'confirmed', 'out_for_delivery', 'delivered', 'cancelled'];
-        if (!in_array($status, $allowed, true)) {
-            return response()->json(['success' => false, 'message' => 'Invalid status']);
+    // ── GET /vendor/dashboard ─────────────────────────
+    // Summary counts for the vendor home/dashboard (admin-panel style).
+    public function dashboard(Request $request)
+    {
+        $vendor = $request->user();
+        $vid    = $vendor->id;
+
+        $productsTotal  = Product::where('vendor_id', $vid)->count();
+        $productsActive = Product::where('vendor_id', $vid)->where('is_active', 1)->count();
+
+        // This vendor's sub-orders carry their own status + earning.
+        $subs = \App\Models\VendorOrder::where('vendor_id', $vid)->get();
+
+        $byStatus = ['pending' => 0, 'confirmed' => 0, 'packed' => 0, 'assigned' => 0, 'out_for_delivery' => 0, 'delivered' => 0, 'cancelled' => 0];
+        $revenue  = 0.0;
+        $pendingEarning = 0.0;
+        foreach ($subs as $vo) {
+            $key = strtolower((string) $vo->status);
+            if (array_key_exists($key, $byStatus)) $byStatus[$key]++;
+            if ($key === 'delivered') {
+                $revenue += (float) $vo->vendor_earning;
+                if ($vo->payout_id === null) $pendingEarning += (float) $vo->vendor_earning;
+            }
         }
 
-        // Vendor may only act on an order that contains one of their products.
-        $order = \App\Models\Order::where('id', $orderId)
-            ->whereHas('items', fn($q) => $q->whereHas('product',
-                fn($pq) => $pq->where('vendor_id', $vendor->id)))
-            ->first();
+        $sub = $vendor->activeSubscription;
 
-        if (!$order) return response()->json(['success' => false, 'message' => 'Order not found']);
+        return response()->json([
+            'success' => true,
+            'data'    => [
+                'products_total'  => $productsTotal,
+                'products_active' => $productsActive,
+                'orders_total'    => $subs->count(),
+                'orders_by_status'=> $byStatus,
+                'revenue'         => round($revenue, 2),
+                'pending_earning' => round($pendingEarning, 2),
+                'subscription'    => $sub ? [
+                    'plan_name'      => $sub->plan->name ?? null,
+                    'end_date'       => $sub->end_date,
+                    'days_remaining' => method_exists($sub, 'daysRemaining') ? $sub->daysRemaining() : null,
+                ] : null,
+            ],
+        ]);
+    }
 
-        $order->update(['status' => $status]);
+    // ── POST /vendor/orders/update-status ─────────────
+    // Acts on the vendor's OWN sub-order only and recomputes the parent status.
+    public function updateOrderStatus(Request $request)
+    {
+        $vendor = $request->user();
+        $id     = (int) ($request->input('vendor_order_id') ?? $request->input('order_id'));
+        $status = (string) $request->input('status');
 
-        return response()->json(['success' => true, 'message' => 'Order status updated', 'status' => $status]);
+        $vo = $this->resolveVendorOrder($vendor, $id);
+        if (!$vo) return response()->json(['success' => false, 'message' => 'Order not found']);
+
+        [$ok, $msg] = app(\App\Services\OrderStatusService::class)
+            ->setVendorOrderStatus($vo, $status, 'vendor', $vendor->id);
+
+        if (!$ok) return response()->json(['success' => false, 'message' => $msg]);
+
+        if ($request->filled('tracking_number') || $request->filled('courier_name')) {
+            $vo->update([
+                'tracking_number' => $request->input('tracking_number', $vo->tracking_number),
+                'courier_name'    => $request->input('courier_name', $vo->courier_name),
+            ]);
+        }
+
+        return response()->json(['success' => true, 'message' => 'Order status updated', 'status' => $vo->fresh()->status]);
+    }
+
+    // ── POST /vendor/orders/assign-delivery ───────────
+    // Vendor packs then assigns a delivery boy → sub-order moves to 'assigned'.
+    public function assignDelivery(Request $request)
+    {
+        $vendor        = $request->user();
+        $id            = (int) ($request->input('vendor_order_id') ?? $request->input('order_id'));
+        $deliveryBoyId = (int) $request->input('delivery_boy_id');
+
+        $vo = $this->resolveVendorOrder($vendor, $id);
+        if (!$vo) return response()->json(['success' => false, 'message' => 'Order not found']);
+        if (!\Illuminate\Support\Facades\DB::table('delivery_boy')->where('id', $deliveryBoyId)->exists()) {
+            return response()->json(['success' => false, 'message' => 'Delivery boy not found']);
+        }
+
+        $vo->update(['delivery_boy_id' => $deliveryBoyId]);
+        app(\App\Services\OrderStatusService::class)
+            ->setVendorOrderStatus($vo, 'assigned', 'vendor', $vendor->id, "Assigned delivery boy #$deliveryBoyId");
+
+        return response()->json(['success' => true, 'message' => 'Delivery boy assigned']);
+    }
+
+    // ── GET /vendor/delivery-boys ─────────────────────
+    // Hybrid: the platform pool (vendor_id NULL) + this vendor's own riders.
+    public function deliveryBoys(Request $request)
+    {
+        $vendor = $request->user();
+        $boys = \App\Models\DeliveryBoy::query()
+            ->where(fn($q) => $q->whereNull('vendor_id')->orWhere('vendor_id', $vendor->id))
+            ->where('status', 'active')
+            ->orderBy('name')
+            ->get()
+            ->map(fn($b) => [
+                'id' => $b->id, 'name' => $b->name, 'mobile' => $b->mobile,
+                'pin_code' => $b->pin_code, 'status' => $b->status,
+                'owned' => $b->vendor_id == $vendor->id, // true = this vendor's own
+            ]);
+        return response()->json(['success' => true, 'data' => $boys]);
+    }
+
+    // ── GET /vendor/delivery-boys/mine ────────────────
+    public function myDeliveryBoys(Request $request)
+    {
+        $vendor = $request->user();
+        $boys = \App\Models\DeliveryBoy::where('vendor_id', $vendor->id)
+            ->orderByDesc('id')->get()
+            ->map(fn($b) => [
+                'id' => $b->id, 'name' => $b->name, 'email' => $b->email,
+                'mobile' => $b->mobile, 'pin_code' => $b->pin_code, 'status' => $b->status,
+            ]);
+        return response()->json(['success' => true, 'data' => $boys]);
+    }
+
+    // ── POST /vendor/delivery-boys/add ────────────────
+    public function addDeliveryBoy(Request $request)
+    {
+        $vendor = $request->user();
+        return app(\App\Http\Controllers\DeliveryController::class)->createRider($request, $vendor->id);
+    }
+
+    // ── POST /vendor/delivery-boys/edit ───────────────
+    // Vendor may only edit their OWN riders.
+    public function editDeliveryBoy(Request $request)
+    {
+        $vendor = $request->user();
+        $boy = \App\Models\DeliveryBoy::where('id', $request->input('id'))
+            ->where('vendor_id', $vendor->id)->first();
+        if (!$boy) return response()->json(['success' => false, 'message' => 'Rider not found']);
+        return app(\App\Http\Controllers\DeliveryController::class)->updateRider($request, $boy);
+    }
+
+    // ── POST /vendor/delivery-boys/delete ─────────────
+    public function deleteDeliveryBoy(Request $request)
+    {
+        $vendor = $request->user();
+        $deleted = \App\Models\DeliveryBoy::where('id', $request->input('id'))
+            ->where('vendor_id', $vendor->id)->delete();
+        if (!$deleted) return response()->json(['success' => false, 'message' => 'Rider not found']);
+        return response()->json(['success' => true, 'message' => 'Rider removed']);
     }
 
     // ── Helper ────────────────────────────────────────

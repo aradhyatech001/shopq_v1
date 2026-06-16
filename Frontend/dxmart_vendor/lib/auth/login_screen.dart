@@ -332,11 +332,15 @@ class _LoginScreenState extends State<LoginScreen>
       fillColor: AppColors.surface,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14.r),
-        borderSide: BorderSide(color: AppColors.borderColor),
+        borderSide: const BorderSide(color: AppColors.borderColor),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14.r),
-        borderSide: BorderSide(color: AppColors.borderColor),
+        borderSide: const BorderSide(color: AppColors.borderColor),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14.r),
+        borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
       ),
       contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
     );

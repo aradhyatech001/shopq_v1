@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
@@ -7,14 +8,18 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../Help/help_screen.dart';
 import '../utils/api_constants.dart';
+import '../utils/api_helper.dart';
 import '../utils/colors.dart';
+import '../utils/order_status.dart';
 
 class TrackOrder extends StatefulWidget {
   final String status;
+  final String orderId;
 
   const TrackOrder({
     super.key,
     required this.status,
+    this.orderId = '',
   });
 
   @override
@@ -25,15 +30,45 @@ class _TrackOrderState extends State<TrackOrder> {
 
   int currentStep = 0;
   String deliveryTime = '0';
-
-
-
+  bool _cancelled = false;
+  Timer? _pollTimer;
 
   @override
   void initState() {
     super.initState();
-    _setCurrentStepFromStatus();
+    _applyStatus(widget.status);
     fetchDeliveryTime();
+    // Pull the live status and keep it fresh so vendor/admin updates show up.
+    if (widget.orderId.isNotEmpty) {
+      _fetchLiveStatus();
+      _pollTimer = Timer.periodic(
+        const Duration(seconds: 12),
+        (_) => _fetchLiveStatus(),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _fetchLiveStatus() async {
+    try {
+      final res = await ApiHelper.get(
+        '${ApiConstants.GET_ALL_ORDERS}/${widget.orderId}',
+        auth: true,
+      );
+      if (res.statusCode != 200) return;
+      final data = jsonDecode(res.body);
+      // getSingle → { success, order: { order: {...}, items: [...] } }
+      final status = (data['order']?['order']?['status'] ??
+              data['order']?['status'] ??
+              '')
+          .toString();
+      if (status.isNotEmpty && mounted) _applyStatus(status);
+    } catch (_) {}
   }
 
 
@@ -60,22 +95,18 @@ class _TrackOrderState extends State<TrackOrder> {
     }
   }
 
-  void _setCurrentStepFromStatus() {
-    switch (widget.status.toLowerCase()) {
-      case "pending":
-        currentStep = 0;
-        break;
-      case "packed":
-        currentStep = 1;
-        break;
-      case "way":
-        currentStep = 2;
-        break;
-      case "delivered":
-        currentStep = 3;
-        break;
-      default:
-        currentStep = 0;
+  void _applyStatus(String status) {
+    // Canonical mapping shared by user/admin/vendor + backend.
+    final cancelled = OrderStatus.isCancelled(status);
+    final step = cancelled ? currentStep : OrderStatus.step(status);
+    if (mounted) {
+      setState(() {
+        currentStep = step;
+        _cancelled = cancelled;
+      });
+    } else {
+      currentStep = step;
+      _cancelled = cancelled;
     }
   }
 
@@ -158,6 +189,36 @@ class _TrackOrderState extends State<TrackOrder> {
               ),
             ),
           ),
+
+          if (_cancelled)
+            Padding(
+              padding: EdgeInsets.only(left: 20.w, right: 20.w, top: 20.h),
+              child: Container(
+                width: double.infinity,
+                padding: EdgeInsets.all(14.w),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12.r),
+                  border: Border.all(color: Colors.red),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.cancel_outlined, color: Colors.red, size: 20.sp),
+                    SizedBox(width: 10.w),
+                    Expanded(
+                      child: Text(
+                        'This order has been cancelled.',
+                        style: GoogleFonts.jost(
+                          fontSize: 13.sp,
+                          color: Colors.red.shade700,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
 
           // Estimated Delivery Card
           Padding(

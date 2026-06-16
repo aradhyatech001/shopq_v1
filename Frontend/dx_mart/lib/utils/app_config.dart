@@ -23,6 +23,19 @@ class AppConfig {
   static bool get codEnabled    => flag('payment_cod_enabled', true);
   static bool get onlineEnabled => flag('payment_online_enabled', false);
 
+  // Banner appearance (admin-controlled, all optional). When the admin hasn't
+  // set a value the app keeps its built-in default (passed as the fallback).
+  static double bannerHeight(double fallback) => num('banner_height', fallback);
+  static double bannerRadius(double fallback) => num('banner_radius', fallback);
+  static bool   get bannerAutoplay            => flag('banner_autoplay', true);
+
+  /// Reads a numeric setting, returning [fallback] when unset/invalid.
+  static double num(String key, double fallback) {
+    final v = _values[key];
+    if (v == null || '$v'.isEmpty) return fallback;
+    return double.tryParse('$v') ?? fallback;
+  }
+
   static String str(String key, [String fallback = '']) {
     final v = _values[key];
     return (v == null || '$v'.isEmpty) ? fallback : '$v';

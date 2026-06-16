@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -90,7 +91,9 @@ class _PincodeScreenState extends State<PincodeScreen> {
             key: formKey,
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               _field(codeCtrl, 'Pincode', required: true, readOnly: existing != null,
-                  keyboardType: TextInputType.number),
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
               SizedBox(height: 10.h),
               _field(areaCtrl, 'Area Name', required: true),
               SizedBox(height: 10.h),
@@ -202,12 +205,16 @@ class _PincodeScreenState extends State<PincodeScreen> {
 
   Widget _field(TextEditingController ctrl, String label,
       {bool required = false, bool readOnly = false,
-       TextInputType keyboardType = TextInputType.text}) {
+       TextInputType keyboardType = TextInputType.text,
+       int? maxLength, List<TextInputFormatter>? inputFormatters}) {
     return TextFormField(
       controller: ctrl,
       readOnly: readOnly,
       keyboardType: keyboardType,
+      maxLength: maxLength,
+      inputFormatters: inputFormatters,
       decoration: InputDecoration(
+        counterText: '',
         labelText: label,
         border: const OutlineInputBorder(),
         contentPadding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.h),

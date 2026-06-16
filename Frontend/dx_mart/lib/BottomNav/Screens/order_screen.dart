@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'dart:convert';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -8,6 +9,7 @@ import '../../OrderSummary/order_summary.dart';
 import '../../TrackOrder/track_order.dart';
 import '../../utils/api_constants.dart';
 import '../../utils/colors.dart';
+import '../../utils/order_status.dart';
 import '../bottomNavScreen.dart';
 import '../../utils/api_helper.dart';
 
@@ -19,7 +21,7 @@ class OrderScreen extends StatefulWidget {
 }
 
 class _OrderScreenState extends State<OrderScreen>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   bool isLoading = true;
   List orders = [];
 
@@ -28,17 +30,35 @@ class _OrderScreenState extends State<OrderScreen>
   String userEmail = "";
   String userId = "";
 
+  // Silent polling so a status change made by the vendor/admin shows up here
+  // without the user having to pull-to-refresh.
+  Timer? _pollTimer;
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    WidgetsBinding.instance.addObserver(this);
     fetchUserData();
+    _pollTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (mounted && userId.isNotEmpty) fetchOrders(userId, silent: true);
+    });
   }
 
   @override
   void dispose() {
+    _pollTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _tabController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Refresh as soon as the user comes back to the app.
+    if (state == AppLifecycleState.resumed && userId.isNotEmpty) {
+      fetchOrders(userId, silent: true);
+    }
   }
 
   Future<void> fetchUserData() async {
@@ -55,13 +75,13 @@ class _OrderScreenState extends State<OrderScreen>
     }
   }
 
-  Future<void> fetchOrders(String userid) async {
+  Future<void> fetchOrders(String userid, {bool silent = false}) async {
     try {
       final response = await ApiHelper.post(ApiConstants.GET_ORDER_BY_USER, body: {"user_id": userId.toString()}, auth: true);
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-
+        if (!mounted) return;
         setState(() {
           orders = (data["orders"] ?? []) as List;
           isLoading = false;
@@ -71,17 +91,11 @@ class _OrderScreenState extends State<OrderScreen>
       }
     } catch (e) {
       debugPrint("Error: $e");
-      setState(() => isLoading = false);
+      if (mounted && !silent) setState(() => isLoading = false);
     }
   }
 
-  bool _isCompleteStatus(String? statusRaw) {
-    final status = (statusRaw ?? '').toLowerCase();
-    return status.contains('delivered') ||
-        status.contains('completed') ||
-        status.contains('cancelled') ||
-        status.contains('canceled');
-  }
+  bool _isCompleteStatus(String? statusRaw) => OrderStatus.isComplete(statusRaw);
 
   void _showRatingBottomSheet(String orderId) {
     int rating = 0;
@@ -454,7 +468,7 @@ class _OrderScreenState extends State<OrderScreen>
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => TrackOrder(status: status),
+                              builder: (context) => TrackOrder(status: status, orderId: orderData["id"]?.toString() ?? ""),
                             ),
                           );
                         },
@@ -548,7 +562,7 @@ class _OrderScreenState extends State<OrderScreen>
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => TrackOrder(status: status),
+                      builder: (context) => TrackOrder(status: status, orderId: orderData["id"]?.toString() ?? ""),
                     ),
                   );
                 },
@@ -766,6 +780,7 @@ class _Thumb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final resolved = ApiConstants.imageUrl(url);
     return Container(
       width: 40.w,
       height: 40.w,
@@ -781,12 +796,12 @@ class _Thumb extends StatelessWidget {
         ],
       ),
       clipBehavior: Clip.antiAlias,
-      child: url.isEmpty
+      child: resolved.isEmpty
           ? const Icon(Icons.image_not_supported_outlined)
           : Padding(
               padding: const EdgeInsets.all(8.0),
               child: Image.network(
-                url,
+                resolved,
                 fit: BoxFit.contain,
                 errorBuilder: (_, _, _) =>
                     const Icon(Icons.broken_image_outlined),

@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import '../utils/api_constants.dart';
 import '../utils/colors.dart';
 import '../utils/vendor_api_helper.dart';
+import '../utils/vendor_widgets.dart';
 
 class ProductsScreen extends StatefulWidget {
   const ProductsScreen({super.key});
@@ -21,6 +22,10 @@ class _ProductsScreenState extends State<ProductsScreen> {
   List _categories = [];
   List _types      = [];
   bool _loading    = true;
+
+  // Right-panel form state (wide screens). _formOpen + _formProduct(null = add).
+  bool _formOpen = false;
+  Map? _formProduct;
 
   @override
   void initState() {
@@ -72,18 +77,36 @@ class _ProductsScreenState extends State<ProductsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg, style: GoogleFonts.jost())));
 
   void _openForm({Map? existing}) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _ProductForm(
-        categories: _categories,
-        types: _types,
-        existing: existing,
-        onSaved: _load,
-      ),
-    );
+    final wide = MediaQuery.of(context).size.width >= 900;
+    if (wide) {
+      // Show the form in the right panel.
+      setState(() {
+        _formOpen = true;
+        _formProduct = existing;
+      });
+    } else {
+      // Full page on phones (no bottom sheet).
+      Navigator.push(context, MaterialPageRoute(
+        builder: (_) => Scaffold(
+          backgroundColor: AppColors.background,
+          body: SafeArea(
+            child: _ProductForm(
+              categories: _categories,
+              types: _types,
+              existing: existing,
+              onSaved: _load,
+              onClose: () => Navigator.pop(context),
+            ),
+          ),
+        ),
+      ));
+    }
   }
+
+  void _closePanel() => setState(() {
+        _formOpen = false;
+        _formProduct = null;
+      });
 
   /// Lowest selling price across a product's variants, formatted for display.
   String? _priceLabel(Map p) {
@@ -100,104 +123,70 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: _loading
+    return VendorPage(
+      title: 'Products',
+      subtitle: '${_products.length} product${_products.length == 1 ? '' : 's'}',
+      actions: [
+        IconButton(
+          tooltip: 'Refresh',
+          onPressed: _load,
+          icon: Icon(Icons.refresh_rounded, size: 20.sp, color: AppColors.textSecondary),
+        ),
+        IconButton(
+          tooltip: 'Add product',
+          onPressed: () => _openForm(),
+          icon: Icon(Icons.add_circle, size: 24.sp, color: AppColors.primary),
+        ),
+      ],
+      child: _loading
           ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _load,
-              child: CustomScrollView(
-                slivers: [
-                  // ── Page header ──────────────────────────────
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(20.w, 20.h, 20.w, 0),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Products',
-                                  style: GoogleFonts.jost(
-                                    fontSize: 22.sp,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.textPrimary,
-                                  ),
-                                ),
-                                Text(
-                                  '${_products.length} product${_products.length == 1 ? '' : 's'}',
-                                  style: GoogleFonts.jost(
-                                    fontSize: 13.sp,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: _load,
-                            icon: const Icon(Icons.refresh_rounded,
-                                color: AppColors.textSecondary),
-                          ),
-                          FilledButton.icon(
-                            onPressed: () => _openForm(),
-                            icon: const Icon(Icons.add, size: 18),
-                            label: Text(
-                              'Add',
-                              style: GoogleFonts.jost(fontWeight: FontWeight.w600),
-                            ),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              padding: EdgeInsets.symmetric(
-                                  horizontal: 16.w, vertical: 10.h),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10.r)),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
+          : (MediaQuery.of(context).size.width >= 900)
+              ? _splitView()
+              : _listView(),
+    );
+  }
 
-                  // ── Content ───────────────────────────────────
-                  if (_products.isEmpty)
-                    SliverFillRemaining(
-                      child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.inventory_2_outlined,
-                                size: 56.sp, color: AppColors.hint),
-                            SizedBox(height: 12.h),
-                            Text('No products yet',
-                                style: GoogleFonts.jost(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 14.sp)),
-                            SizedBox(height: 16.h),
-                            OutlinedButton.icon(
-                              onPressed: () => _openForm(),
-                              icon: const Icon(Icons.add),
-                              label: Text('Add first product',
-                                  style: GoogleFonts.jost()),
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  else
-                    SliverPadding(
-                      padding: EdgeInsets.fromLTRB(20.w, 16.h, 20.w, 100.h),
-                      sliver: SliverList.separated(
-                        itemCount: _products.length,
-                        separatorBuilder: (_, __) => SizedBox(height: 10.h),
-                        itemBuilder: (_, i) => _productCard(_products[i]),
-                      ),
-                    ),
-                ],
-              ),
-            ),
+  Widget _listView() {
+    if (_products.isEmpty) {
+      return const VEmpty(
+          icon: Icons.inventory_2_outlined,
+          message: 'No products yet',
+          hint: 'Tap + to add your first product');
+    }
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView.separated(
+        padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 100.h),
+        itemCount: _products.length,
+        separatorBuilder: (_, __) => SizedBox(height: 10.h),
+        itemBuilder: (_, i) => _productCard(_products[i]),
+      ),
+    );
+  }
+
+  Widget _splitView() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(flex: 4, child: _listView()),
+        const VerticalDivider(width: 1, color: AppColors.borderColor),
+        Expanded(
+          flex: 5,
+          child: _formOpen
+              ? _ProductForm(
+                  key: ValueKey(_formProduct?['id'] ?? 'new'),
+                  categories: _categories,
+                  types: _types,
+                  existing: _formProduct,
+                  onSaved: _load,
+                  onClose: _closePanel,
+                )
+              : const VEmpty(
+                  icon: Icons.inventory_2_outlined,
+                  message: 'Select a product to edit',
+                  hint: 'or tap + to add a new one'),
+        ),
+      ],
     );
   }
 
@@ -206,12 +195,18 @@ class _ProductsScreenState extends State<ProductsScreen> {
     final images   = (p['images'] as List?) ?? [];
     final price    = _priceLabel(p);
     final variantCount = ((p['variants'] as List?) ?? []).length;
+    final selected = _formOpen && _formProduct != null && _formProduct!['id'] == p['id'];
 
-    return Container(
+    return GestureDetector(
+      onTap: () => _openForm(existing: p),
+      child: Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(12.r),
-        border: Border.all(color: AppColors.borderColor),
+        border: Border.all(
+          color: selected ? AppColors.primary : AppColors.borderColor,
+          width: selected ? 1.5 : 1,
+        ),
       ),
       child: Padding(
         padding: EdgeInsets.all(14.w),
@@ -355,6 +350,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
           ],
         ),
       ),
+      ),
     );
   }
 
@@ -461,12 +457,15 @@ class _ProductForm extends StatefulWidget {
   final List types;
   final Map? existing;
   final VoidCallback onSaved;
+  final VoidCallback? onClose; // closes the side panel / pops the page
 
   const _ProductForm({
+    super.key,
     required this.categories,
     required this.types,
     this.existing,
     required this.onSaved,
+    this.onClose,
   });
 
   @override
@@ -617,7 +616,7 @@ class _ProductFormState extends State<_ProductForm> {
           });
         }
         widget.onSaved();
-        if (mounted) Navigator.pop(context);
+        if (mounted) widget.onClose?.call();
       } else {
         _snack(data['message'] ?? 'Failed');
       }
@@ -645,40 +644,42 @@ class _ProductFormState extends State<_ProductForm> {
   Widget build(BuildContext context) {
     final isEdit = _savedId != null;
     return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20.r)),
-      ),
-      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.92),
-      padding: EdgeInsets.only(
-        left: 20.w, right: 20.w, top: 16.h,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 20.h,
-      ),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 620),
-          child: Form(
-            key: _formKey,
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40.w, height: 4.h,
-                      decoration: BoxDecoration(
-                          color: AppColors.borderColor,
-                          borderRadius: BorderRadius.circular(2.r)),
-                    ),
-                  ),
-                  SizedBox(height: 16.h),
-                  Text(
-                    isEdit ? 'Edit Product' : 'Add Product',
-                    style: GoogleFonts.jost(fontWeight: FontWeight.w700, fontSize: 18.sp),
-                  ),
-                  SizedBox(height: 18.h),
-
+      color: AppColors.background,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header (title + close) — replaces the old bottom-sheet drag handle
+          Container(
+            padding: EdgeInsets.fromLTRB(20.w, 14.h, 10.w, 14.h),
+            decoration: const BoxDecoration(
+              color: AppColors.surface,
+              border: Border(bottom: BorderSide(color: AppColors.borderColor)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(isEdit ? 'Edit Product' : 'Add Product',
+                      style: GoogleFonts.jost(fontWeight: FontWeight.w800, fontSize: 17.sp)),
+                ),
+                IconButton(
+                  icon: Icon(Icons.close_rounded, size: 20.sp, color: AppColors.textSecondary),
+                  onPressed: () => widget.onClose?.call(),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Form(
+              key: _formKey,
+              child: SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(20.w, 16.h, 20.w, 24.h),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 700),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                   // ── Basics ───────────────────────────────────
                   TextFormField(
                     controller: _nameCtrl,
@@ -849,11 +850,14 @@ class _ProductFormState extends State<_ProductForm> {
                             ),
                     ),
                   ),
-                ],
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }

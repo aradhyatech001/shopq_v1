@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../auth/login_screen.dart';
 import '../dashboard/dashboard_screen.dart';
+import '../delivery/delivery_boys_screen.dart';
 import '../orders/orders_screen.dart';
 import '../pincode/pincode_screen.dart';
 import '../products/products_screen.dart';
@@ -46,6 +47,7 @@ class _HomeScreenState extends State<HomeScreen> {
     PincodeScreen(),
     SubscriptionScreen(),
     ProfileScreen(),
+    DeliveryBoysScreen(), // index 6 — appended so the mobile bottom-nav stays intact
   ];
 
   static const List<_MenuItem> _menuItems = [
@@ -57,6 +59,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _MenuItem(icon: Icons.receipt_long_outlined,   label: 'Orders',       screenIndex: 2),
     _MenuItem(label: 'DELIVERY', isGroupHeader: true),
     _MenuItem(icon: Icons.location_on_outlined,    label: 'Pincodes',     screenIndex: 3),
+    _MenuItem(icon: Icons.delivery_dining_rounded, label: 'Delivery Boys',screenIndex: 6),
     _MenuItem(icon: Icons.card_membership_rounded, label: 'Subscription', screenIndex: 4),
     _MenuItem(label: 'ACCOUNT', isGroupHeader: true),
     _MenuItem(icon: Icons.person_outline_rounded,  label: 'Profile',      screenIndex: 5),

@@ -41,12 +41,37 @@ class HomeSectionController extends Controller
 
         switch ($s->section_type) {
             case 'banner':
-                if (!$s->banner_image) return null;
+                // New model: a banner section references one or many existing
+                // banners (created in Banner Management). Fall back to the legacy
+                // single uploaded image if no banner_ids were chosen.
+                $bannerIds = is_array($s->banner_ids) ? $s->banner_ids : [];
+                $banners   = [];
+                if (!empty($bannerIds)) {
+                    $rows = \App\Models\Banner::whereIn('id', $bannerIds)->where('is_active', 1)->get()
+                        ->sortBy(fn($b) => array_search($b->id, $bannerIds))->values();
+                    foreach ($rows as $b) {
+                        $banners[] = [
+                            'id'               => $b->id,
+                            'banner_image'     => $this->imageUrl($b->banner_image),
+                            'link_category_id' => $b->category_id,
+                        ];
+                    }
+                } elseif ($s->banner_image) {
+                    $banners[] = [
+                        'id'               => null,
+                        'banner_image'     => $this->imageUrl($s->banner_image),
+                        'link_category_id' => $s->link_category_id,
+                    ];
+                }
+                if (empty($banners)) return null;
                 return [
                     'type'             => 'banner',
                     'title'            => $s->title,
-                    'banner_image'     => $this->imageUrl($s->banner_image),
-                    'link_category_id' => $s->link_category_id,
+                    // Legacy single-image keys (first banner) for older app builds.
+                    'banner_image'     => $banners[0]['banner_image'],
+                    'link_category_id' => $banners[0]['link_category_id'],
+                    // New: full list so the app can show a carousel.
+                    'banners'          => $banners,
                 ];
 
             case 'category_grid':
@@ -183,6 +208,7 @@ class HomeSectionController extends Controller
             'title'            => trim($request->input('title', '')),
             'emoji'            => $request->input('emoji'),
             'banner_image'     => $this->storeBanner($request),
+            'banner_ids'       => $this->parseBannerIds($request),
             'section_type'     => $type,
             'product_type'     => $request->input('product_type') ?: null,
             'main_category_id' => $request->input('main_category_id') ?: null,
@@ -216,6 +242,11 @@ class HomeSectionController extends Controller
         $newBanner = $this->storeBanner($request);
         if ($newBanner) $updates['banner_image'] = $newBanner;
 
+        // Selected banners (multi). Only overwrite when the key was sent.
+        if ($request->has('banner_ids')) {
+            $updates['banner_ids'] = $this->parseBannerIds($request);
+        }
+
         $section->update($updates);
         return response()->json(['success' => true, 'message' => 'Section updated']);
     }
@@ -245,6 +276,21 @@ class HomeSectionController extends Controller
         return response()->json(['success' => true, 'message' => 'Reordered']);
     }
 
+    /// Normalises banner_ids coming as a JSON string, comma list, or array
+    /// into a clean array of ints (or null when none).
+    private function parseBannerIds(Request $request): ?array
+    {
+        $raw = $request->input('banner_ids');
+        if ($raw === null || $raw === '') return null;
+        if (is_string($raw)) {
+            $decoded = json_decode($raw, true);
+            $raw = is_array($decoded) ? $decoded : explode(',', $raw);
+        }
+        if (!is_array($raw)) return null;
+        $ids = array_values(array_filter(array_map('intval', $raw)));
+        return empty($ids) ? null : $ids;
+    }
+
     private function storeBanner(Request $request): ?string
     {
         if ($request->filled('banner_data') && $request->filled('banner_name')) {
@@ -257,12 +303,15 @@ class HomeSectionController extends Controller
 
     private function adminRow(HomeSection $s): array
     {
+        $bannerIds = is_array($s->banner_ids) ? $s->banner_ids : [];
         return [
             'id'               => $s->id,
             'home_tab_id'      => $s->home_tab_id,
             'title'            => $s->title,
             'emoji'            => $s->emoji,
             'banner_image'     => $this->imageUrl($s->banner_image),
+            'banner_ids'       => $bannerIds,
+            'banner_count'     => count($bannerIds),
             'section_type'     => $s->section_type,
             'product_type'     => $s->product_type,
             'main_category_id' => $s->main_category_id,

@@ -1490,35 +1490,86 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildLayoutBanner(Map s) {
-    final img = s['banner_image']?.toString() ?? '';
-    if (img.isEmpty) return const SizedBox.shrink();
-    return GestureDetector(
-      onTap: () {
-        final catId = int.tryParse('${s['link_category_id'] ?? ''}');
-        if (catId != null) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => CategoryViewScreen(
-                categoryId: catId,
-                categoryName: s['title']?.toString() ?? 'Category',
+    // New model: a banner section can carry one OR many banners. Fall back to
+    // the legacy single image for older payloads.
+    final List banners = (s['banners'] as List?) ?? [];
+    final List list = banners.isNotEmpty
+        ? banners
+        : ((s['banner_image']?.toString() ?? '').isNotEmpty
+              ? [
+                  {
+                    'banner_image': s['banner_image'],
+                    'link_category_id': s['link_category_id'],
+                  },
+                ]
+              : []);
+    if (list.isEmpty) return const SizedBox.shrink();
+
+    // Size/properties are admin-managed (optional). When unset, keep the app's
+    // built-in defaults.
+    final double height = AppConfig.bannerHeight(140).h;
+    final double radius = AppConfig.bannerRadius(16).r;
+
+    Widget tile(Map b) {
+      final img = ApiConstants.imageUrl(b['banner_image']?.toString() ?? '');
+      if (img.isEmpty) return const SizedBox.shrink();
+      return GestureDetector(
+        onTap: () {
+          final catId = int.tryParse('${b['link_category_id'] ?? ''}');
+          if (catId != null) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => CategoryViewScreen(
+                  categoryId: catId,
+                  categoryName: s['title']?.toString() ?? 'Category',
+                ),
               ),
-            ),
-          );
-        }
-      },
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(12.w, 14.h, 12.w, 6.h),
+            );
+          }
+        },
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(16.r),
+          borderRadius: BorderRadius.circular(radius),
           child: Image.network(
-            ApiConstants.imageUrl(img),
+            img,
             width: double.infinity,
-            height: 140.h,
+            height: height,
             fit: BoxFit.cover,
             errorBuilder: (_, _, _) => const SizedBox.shrink(),
           ),
         ),
+      );
+    }
+
+    // Single banner → plain image. Multiple → sliding carousel.
+    if (list.length == 1) {
+      return Padding(
+        padding: EdgeInsets.fromLTRB(12.w, 14.h, 12.w, 6.h),
+        child: tile(list.first as Map),
+      );
+    }
+
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 12.h),
+      child: CarouselSlider(
+        options: CarouselOptions(
+          height: height,
+          autoPlay: AppConfig.bannerAutoplay,
+          viewportFraction: 0.9,
+          enlargeCenterPage: false,
+          autoPlayInterval: const Duration(seconds: 3),
+          enableInfiniteScroll: list.length > 1,
+        ),
+        items: list
+            .map(
+              (b) => Builder(
+                builder: (_) => Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 4.w),
+                  child: tile(b as Map),
+                ),
+              ),
+            )
+            .toList(),
       ),
     );
   }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -14,6 +15,8 @@ class CustomTextField extends StatefulWidget {
   final String? preFixIcon;
   final String? Function(String?)? validator;
   final bool enabled; // ✅ New line
+  final int? maxLength; // limit number of characters (e.g. phone 10, pincode 6)
+  final List<TextInputFormatter>? inputFormatters; // e.g. digits-only
 
   const CustomTextField({
     super.key,
@@ -25,6 +28,8 @@ class CustomTextField extends StatefulWidget {
     this.preFixIcon,
     this.validator,
     this.enabled = true, // ✅ Default value
+    this.maxLength,
+    this.inputFormatters,
   });
 
   @override
@@ -46,7 +51,10 @@ class _CustomTextFieldState extends State<CustomTextField> {
         obscureText: widget.isObscure,
         enabled: widget.enabled,
         keyboardType: widget.keyboardType,
+        maxLength: widget.maxLength,
+        inputFormatters: widget.inputFormatters,
         decoration: InputDecoration(
+          counterText: '', // hide the "x/10" counter
           hintText: widget.hintText,
           hintStyle: GoogleFonts.jost(
             color: AppColors.hintTextColor,

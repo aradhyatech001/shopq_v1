@@ -45,11 +45,15 @@ class OrderController extends Controller
             return response()->json(['success' => false, 'code' => 'no_address', 'message' => 'Please select a delivery address.']);
         }
 
-        // Fetch cart — LEFT JOIN so items without a variant (or null variant_id) are included
+        // Fetch cart — LEFT JOIN so items without a variant (or null variant_id) are included.
+        // `price` = selling price (what the line is sold at, stored on order_items).
+        // `mrp`   = original price (struck-through), used for the items subtotal so the
+        //           discount line isn't double-counted in the final amount.
         $cartItems = DB::select("
             SELECT c.product_id, c.variant_id, c.quantity, c.image_url,
                    COALESCE(v.selling_price, v.price, 0) AS price,
-                   p.name as product_name
+                   COALESCE(v.price, v.selling_price, 0)  AS mrp,
+                   p.name as product_name, p.vendor_id AS vendor_id
             FROM cart_items c
             LEFT JOIN product_variants v ON c.variant_id = v.id
             JOIN products p ON c.product_id = p.id
@@ -60,10 +64,14 @@ class OrderController extends Controller
             return response()->json(['success' => false, 'message' => 'Cart is empty']);
         }
 
-        $cartTotal = 0;
+        // Items subtotal at MRP. The frontend's `discount_amount` already includes the
+        // MRP→selling savings, so final = mrpTotal - discount + charges == selling + charges
+        // (matching the total the user saw at checkout). Using the selling total here
+        // would subtract the savings a second time and under-charge the order.
+        $cartTotal = 0;   // MRP subtotal → stored as total_amount
         $items     = [];
         foreach ($cartItems as $row) {
-            $cartTotal += (float) $row->price * (int) $row->quantity;
+            $cartTotal += (float) $row->mrp * (int) $row->quantity;
             $items[] = (array) $row;
         }
 
@@ -87,19 +95,60 @@ class OrderController extends Controller
             'gift'            => $gift,
         ]);
 
-        // Order items + stock
+        // ── Multi-vendor: group items by vendor and create one sub-order each.
+        // Platform commission default (vendor.commission_rate overrides it).
+        $defaultCommission = (float) (\App\Models\AppSetting::where('key', 'platform_commission_rate')->value('value') ?? 0);
+
+        // Pre-create a vendor_order per distinct vendor in the cart.
+        $vendorTotals = [];   // vendor_id => subtotal (selling)
         foreach ($items as $item) {
+            $vid = $item['vendor_id'] ?: 0;
+            if ($vid == 0) continue;
+            $vendorTotals[$vid] = ($vendorTotals[$vid] ?? 0) + (float) $item['price'] * (int) $item['quantity'];
+        }
+        $vendorOrderIds = []; // vendor_id => vendor_order id
+        foreach ($vendorTotals as $vid => $subtotal) {
+            $rate = \App\Models\Vendor::where('id', $vid)->value('commission_rate');
+            $rate = $rate !== null ? (float) $rate : $defaultCommission;
+            $commission = round($subtotal * $rate / 100, 2);
+            $vendorOrderIds[$vid] = \App\Models\VendorOrder::create([
+                'parent_order_id'   => $order->id,
+                'vendor_id'         => $vid,
+                'status'            => 'pending',
+                'items_subtotal'    => $subtotal,
+                'commission_rate'   => $rate,
+                'commission_amount' => $commission,
+                'vendor_earning'    => round($subtotal - $commission, 2),
+            ])->id;
+        }
+
+        // Order items (tagged to their vendor sub-order) + stock decrement.
+        foreach ($items as $item) {
+            $vid = $item['vendor_id'] ?: null;
             OrderItem::create([
-                'order_id'   => $order->id,
-                'product_id' => $item['product_id'],
-                'variant_id' => $item['variant_id'],
-                'quantity'   => $item['quantity'],
-                'price'      => $item['price'],      // selling_price at time of order
-                'image_url'  => $item['image_url'],
+                'order_id'        => $order->id,
+                'vendor_order_id' => $vid ? ($vendorOrderIds[$vid] ?? null) : null,
+                'product_id'      => $item['product_id'],
+                'vendor_id'       => $vid,
+                'variant_id'      => $item['variant_id'],
+                'quantity'        => $item['quantity'],
+                'price'           => $item['price'],      // selling_price at time of order
+                'image_url'       => $item['image_url'],
             ]);
             DB::statement("UPDATE product_variants SET stock = stock - ? WHERE id = ? AND stock >= ?",
                 [$item['quantity'], $item['variant_id'], $item['quantity']]);
         }
+
+        // Parent derived status starts at pending; record creation in history.
+        \App\Models\OrderStatusHistory::create([
+            'parent_order_id' => $order->id,
+            'actor_type'      => 'customer',
+            'actor_id'        => $userId,
+            'from_status'     => null,
+            'to_status'       => 'pending',
+            'note'            => 'Order placed',
+            'created_at'      => now(),
+        ]);
 
         // Clear cart
         CartItem::where('user_id', $userId)->delete();
@@ -233,12 +282,25 @@ class OrderController extends Controller
             $items   = DB::select("
                 SELECT oi.id AS order_item_id, oi.product_id, p.name AS product_name,
                        oi.variant_id, pv.name AS variant_name, pv.price, pv.selling_price, pv.stock,
-                       oi.quantity, oi.image_url
+                       oi.quantity, oi.image_url,
+                       (SELECT pi.image_url FROM product_images pi
+                          WHERE pi.product_id = oi.product_id ORDER BY pi.id ASC LIMIT 1) AS product_image
                 FROM order_items oi
                 JOIN products p ON oi.product_id = p.id
                 LEFT JOIN product_variants pv ON oi.variant_id = pv.id
                 WHERE oi.order_id = ?
             ", [$order->id]);
+
+            // Resolve each item's image to an absolute URL. The stored
+            // order_items.image_url is a relative path (or empty), so fall back
+            // to the product's first image and run it through imageUrl().
+            $items = array_map(function ($it) {
+                $raw = !empty($it->image_url) ? $it->image_url : ($it->product_image ?? '');
+                $it->image_url = $this->imageUrl($raw);
+                $it->image     = $it->image_url; // alias the app also reads
+                return $it;
+            }, $items);
+
             return [
                 'order' => array_merge($order->toArray(), [
                     'name'         => $address->name ?? null,

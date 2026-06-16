@@ -11,6 +11,7 @@ import 'package:pdf/widgets.dart' as pw;
 import '../CustomWidgets/admin_widgets.dart';
 import '../utils/api_constants.dart';
 import '../utils/colors.dart';
+import '../utils/order_status.dart';
 
 class OrderManagementScreen extends StatefulWidget {
   const OrderManagementScreen({super.key});
@@ -38,11 +39,25 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
   final _searchCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
 
+  // Canonical lifecycle (shared with user/vendor/backend).
   static const List<String> _statuses = [
     'all',
     'pending',
+    'confirmed',
     'packed',
-    'way',
+    'assigned',
+    'out_for_delivery',
+    'delivered',
+    'cancelled',
+  ];
+
+  // Statuses an admin can set manually (overrides the derived parent status).
+  static const List<String> _settableStatuses = [
+    'pending',
+    'confirmed',
+    'packed',
+    'assigned',
+    'out_for_delivery',
     'delivered',
     'cancelled',
   ];
@@ -226,29 +241,19 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
     }
   }
 
-  Color _statusColor(String s) {
-    switch (s.toLowerCase()) {
-      case 'pending':
-        return AppColors.warningColor;
-      case 'packed':
-        return AppColors.infoColor;
-      case 'way':
-        return const Color(0xFF00BFA5);
-      case 'delivered':
-        return AppColors.successColor;
-      case 'cancelled':
-        return AppColors.errorColor;
-      default:
-        return AppColors.secondaryTextColor;
-    }
-  }
+  Color _statusColor(String s) => OrderStatus.color(s);
 
   IconData _statusIcon(String s) {
     switch (s.toLowerCase()) {
       case 'pending':
         return Icons.pending_actions_rounded;
+      case 'confirmed':
+        return Icons.task_alt_rounded;
       case 'packed':
         return Icons.inventory_2_rounded;
+      case 'assigned':
+        return Icons.delivery_dining_rounded;
+      case 'out_for_delivery':
       case 'way':
         return Icons.local_shipping_rounded;
       case 'delivered':
@@ -434,14 +439,15 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
             SizedBox(height: 14.h),
             StatefulBuilder(
               builder: (_, setSt) => DropdownButtonFormField<String>(
-                value: selected,
+                // Guard: a derived parent status (e.g. processing) isn't settable.
+                value: _settableStatuses.contains(selected) ? selected : null,
                 decoration: const InputDecoration(),
-                items: ['pending', 'packed', 'way', 'delivered', 'cancelled']
+                items: _settableStatuses
                     .map(
                       (s) => DropdownMenuItem(
                         value: s,
                         child: Text(
-                          s == 'way' ? 'On the Way' : _cap(s),
+                          OrderStatus.label(s),
                           style: GoogleFonts.jost(),
                         ),
                       ),
@@ -600,7 +606,7 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
                       ),
                     ),
                     Text(
-                      s == 'way' ? 'WAY' : s.toUpperCase(),
+                      OrderStatus.label(s).toUpperCase(),
                       style: GoogleFonts.jost(
                         fontSize: 8.sp,
                         color: c,
@@ -883,7 +889,7 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
                       ),
                       SizedBox(height: 4.h),
                       StatusBadge(
-                        label: status == 'way' ? 'On Way' : _cap(status),
+                        label: OrderStatus.label(status),
                         color: color,
                       ),
                     ],

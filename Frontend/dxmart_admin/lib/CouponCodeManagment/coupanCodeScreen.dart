@@ -156,17 +156,13 @@ class _CouponCodeScreenState extends State<CouponCodeScreen> {
       );
     }
 
-    showDialog(
-      context: context,
+    showAdminSideSheet(
+      context,
       barrierDismissible: false,
-      builder: (_) => StatefulBuilder(
-        builder: (ctx, setS) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r)),
-          title: Text('Edit Coupon', style: GoogleFonts.jost(fontWeight: FontWeight.w700)),
-          content: SizedBox(
-            width: 380.w,
-            child: SingleChildScrollView(
-              child: Column(
+      child: StatefulBuilder(
+        builder: (ctx, setS) => AdminSideSheet(
+          title: 'Edit Coupon',
+          child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -223,8 +219,6 @@ class _CouponCodeScreenState extends State<CouponCodeScreen> {
                   ),
                 ],
               ),
-            ),
-          ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: GoogleFonts.jost())),
             ElevatedButton(

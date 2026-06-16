@@ -9,12 +9,17 @@ class AdminController extends Controller
 {
     public function login(Request $request)
     {
-        $email    = $request->input('email');
-        $password = $request->input('password');
-        $admin    = Admin::where('email', $email)->first();
+        $email    = strtolower(trim($request->input('email', '')));
+        $password = $request->input('password', '');
+
+        if (!$email || !$password) {
+            return response()->json(['status' => 'error', 'message' => 'Email and password are required'], 422);
+        }
+
+        $admin = Admin::whereRaw('LOWER(email) = ?', [$email])->first();
 
         if (!$admin || !Hash::check($password, $admin->password)) {
-            return response()->json(['status' => 'error', 'message' => 'Invalid Email or Password']);
+            return response()->json(['status' => 'error', 'message' => 'Invalid Email or Password'], 401);
         }
 
         $admin->tokens()->delete();

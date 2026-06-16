@@ -1,10 +1,9 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:image_picker_web/image_picker_web.dart';
 
+import '../CustomWidgets/admin_widgets.dart';
 import '../utils/admin_api.dart';
 import '../utils/api_constants.dart';
 import '../utils/colors.dart';
@@ -24,6 +23,7 @@ class _SectionBuilderScreenState extends State<SectionBuilderScreen> {
   List _sections = [];
   List _productTypes = [];
   List _categories = [];
+  List _banners = [];
   bool _loading = true;
 
   int get _tabId => widget.tab['id'] as int;
@@ -50,16 +50,19 @@ class _SectionBuilderScreenState extends State<SectionBuilderScreen> {
         AdminApi.get(Uri.parse('${ApiConstants.HOME_SECTIONS}?tab_id=$_tabId')),
         AdminApi.get(Uri.parse(ApiConstants.VIEW_PRODUCT_TYPES)),
         AdminApi.get(Uri.parse(ApiConstants.MAIN_VIEW_CATEGORY)),
+        AdminApi.get(Uri.parse(ApiConstants.VIEW_BANNER)),
       ]);
       final s = jsonDecode(results[0].body);
       final t = jsonDecode(results[1].body);
       final c = jsonDecode(results[2].body);
+      final b = jsonDecode(results[3].body);
       if (!mounted) return;
       setState(() {
         _sections = s['success'] == true ? (s['data'] ?? []) : [];
         _productTypes = t['success'] == true ? (t['data'] ?? []) : [];
         // /admin/categories may return {success,data:[]} or a bare list.
         _categories = c is List ? c : (c['data'] ?? []);
+        _banners = b['success'] == true ? (b['data']?['offer_banners'] ?? []) : [];
       });
     } catch (_) {
     } finally {
@@ -228,18 +231,24 @@ class _SectionBuilderScreenState extends State<SectionBuilderScreen> {
     final type = s['section_type']?.toString() ?? '';
     final label = _typeLabels[type] ?? type;
     if (type == 'product_type') return '$label · ${s['product_type'] ?? 'any'} · limit ${s['product_limit']}';
-    if (type == 'banner') return '$label · ${s['banner_image'] != null ? 'image set' : 'no image'}';
+    if (type == 'banner') {
+      final count = (s['banner_count'] ?? (s['banner_ids'] is List ? (s['banner_ids'] as List).length : 0)) as int;
+      if (count > 0) return '$label · $count banner${count == 1 ? '' : 's'}';
+      return '$label · ${(s['banner_image'] ?? '').toString().isNotEmpty ? '1 banner' : 'none selected'}';
+    }
     return '$label · limit ${s['product_limit']}';
   }
 
-  // ── Add / Edit form ────────────────────────────────────────────────────────
+  // ── Add / Edit form (right side sheet) ──────────────────────────────────────
   void _openForm({Map? existing}) {
-    showDialog(
-      context: context,
-      builder: (_) => _SectionForm(
+    showAdminSideSheet(
+      context,
+      width: 480,
+      child: _SectionForm(
         tabId: _tabId,
         productTypes: _productTypes,
         categories: _categories,
+        banners: _banners,
         existing: existing,
         onSaved: () { _load(); },
         snack: _snack,
@@ -252,6 +261,7 @@ class _SectionForm extends StatefulWidget {
   final int tabId;
   final List productTypes;
   final List categories;
+  final List banners;
   final Map? existing;
   final VoidCallback onSaved;
   final void Function(String) snack;
@@ -260,6 +270,7 @@ class _SectionForm extends StatefulWidget {
     required this.tabId,
     required this.productTypes,
     required this.categories,
+    required this.banners,
     required this.onSaved,
     required this.snack,
     this.existing,
@@ -280,11 +291,8 @@ class _SectionFormState extends State<_SectionForm> {
   bool _loadingSubs = false;
   bool _saving = false;
 
-  // Banner section: image upload + optional "tap → category" link.
-  Uint8List? _bannerBytes;
-  String? _bannerName;
-  String? _existingBannerUrl;
-  int? _linkCategoryId;
+  // Banner section now references one or many existing banners.
+  final Set<int> _selectedBannerIds = {};
 
   static const _types = [
     'product_type', 'products', 'category_grid', 'brand_grid', 'shop_grid', 'banner',
@@ -295,7 +303,7 @@ class _SectionFormState extends State<_SectionForm> {
     'category_grid': 'Category Grid (sub-categories)',
     'brand_grid': 'Brand Grid (top categories)',
     'shop_grid': 'Shop Grid (best shops near you)',
-    'banner': 'Banner',
+    'banner': 'Banner (pick one or more banners)',
   };
 
   // Types that take category/subcategory scope + a product row.
@@ -316,25 +324,15 @@ class _SectionFormState extends State<_SectionForm> {
       _subcategoryId = e['subcategory_id'] is int
           ? e['subcategory_id']
           : int.tryParse('${e['subcategory_id'] ?? ''}');
-      _existingBannerUrl = (e['banner_image'] ?? '').toString();
-      _linkCategoryId = e['link_category_id'] is int
-          ? e['link_category_id']
-          : int.tryParse('${e['link_category_id'] ?? ''}');
+      final ids = e['banner_ids'];
+      if (ids is List) {
+        for (final id in ids) {
+          final v = id is int ? id : int.tryParse('$id');
+          if (v != null) _selectedBannerIds.add(v);
+        }
+      }
       if (_categoryId != null) _loadSubcategories(_categoryId!);
     }
-  }
-
-  Future<void> _pickBannerImage() async {
-    final bytes = await ImagePickerWeb.getImageAsBytes();
-    if (bytes == null) return;
-    if (bytes.lengthInBytes > 512000) {
-      widget.snack('Image must be under 500 KB');
-      return;
-    }
-    setState(() {
-      _bannerBytes = bytes;
-      _bannerName = 'section_${DateTime.now().millisecondsSinceEpoch}.png';
-    });
   }
 
   Future<void> _loadSubcategories(int categoryId) async {
@@ -364,11 +362,9 @@ class _SectionFormState extends State<_SectionForm> {
   }
 
   Future<void> _save() async {
-    // A banner section is pointless without an image.
-    if (_type == 'banner' &&
-        _bannerBytes == null &&
-        (_existingBannerUrl == null || _existingBannerUrl!.isEmpty)) {
-      widget.snack('Pick a banner image to show');
+    // A banner section must reference at least one banner.
+    if (_type == 'banner' && _selectedBannerIds.isEmpty) {
+      widget.snack('Select at least one banner to show');
       return;
     }
     setState(() => _saving = true);
@@ -382,9 +378,7 @@ class _SectionFormState extends State<_SectionForm> {
         if (_type == 'product_type' && _productType != null) 'product_type': _productType!,
         if (_isProductRow && _categoryId != null) 'main_category_id': '$_categoryId',
         if (_isProductRow && _subcategoryId != null) 'subcategory_id': '$_subcategoryId',
-        if (_type == 'banner' && _bannerBytes != null) 'banner_data': base64Encode(_bannerBytes!),
-        if (_type == 'banner' && _bannerName != null) 'banner_name': _bannerName!,
-        if (_type == 'banner' && _linkCategoryId != null) 'link_category_id': '$_linkCategoryId',
+        if (_type == 'banner') 'banner_ids': jsonEncode(_selectedBannerIds.toList()),
       };
       final url = widget.existing != null
           ? ApiConstants.HOME_SECTIONS_EDIT
@@ -409,24 +403,33 @@ class _SectionFormState extends State<_SectionForm> {
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.existing != null;
-    return AlertDialog(
-      backgroundColor: AppColors.surfaceColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r)),
-      title: Text(isEdit ? 'Edit Section' : 'Add Section',
-          style: GoogleFonts.jost(fontWeight: FontWeight.w700)),
-      content: SizedBox(
-        width: 420,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+    return AdminSideSheet(
+      title: isEdit ? 'Edit Section' : 'Add Section',
+      subtitle: 'What shows in this part of the tab',
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: GoogleFonts.jost())),
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          style: FilledButton.styleFrom(backgroundColor: AppColors.primaryColor),
+          child: _saving
+              ? SizedBox(width: 18.w, height: 18.w, child: const CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+              : Text(isEdit ? 'Update' : 'Add', style: GoogleFonts.jost(color: Colors.white)),
+        ),
+      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
               _label('Section Type'),
               DropdownButtonFormField<String>(
                 value: _type,
+                isExpanded: true,
                 decoration: _deco(),
                 items: _types
-                    .map((t) => DropdownMenuItem(value: t, child: Text(_typeNames[t]!, style: GoogleFonts.jost())))
+                    .map((t) => DropdownMenuItem(
+                        value: t,
+                        child: Text(_typeNames[t]!,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.jost())))
                     .toList(),
                 onChanged: (v) => setState(() => _type = v ?? 'product_type'),
               ),
@@ -512,79 +515,92 @@ class _SectionFormState extends State<_SectionForm> {
                 ),
               ],
               if (_type == 'banner') ...[
-                _label('Banner image (what shows to users)'),
-                GestureDetector(
-                  onTap: _pickBannerImage,
-                  child: Container(
-                    height: 110.h,
+                _label('Banners to show (${_selectedBannerIds.length} selected)'),
+                Text(
+                  'Pick one or more. Several selected → shown as a sliding carousel. '
+                  'Create banners in Storefront → Banners.',
+                  style: GoogleFonts.jost(fontSize: 11.sp, color: AppColors.hintTextColor),
+                ),
+                SizedBox(height: 10.h),
+                if (widget.banners.isEmpty)
+                  Container(
                     width: double.infinity,
+                    padding: EdgeInsets.all(14.w),
                     decoration: BoxDecoration(
                       color: AppColors.backgroundColor,
                       borderRadius: BorderRadius.circular(10.r),
                       border: Border.all(color: AppColors.borderColor),
                     ),
-                    clipBehavior: Clip.antiAlias,
-                    child: _bannerBytes != null
-                        ? Image.memory(_bannerBytes!, fit: BoxFit.cover, width: double.infinity)
-                        : (_existingBannerUrl != null && _existingBannerUrl!.isNotEmpty)
-                            ? Image.network(
-                                _existingBannerUrl!,
-                                fit: BoxFit.cover,
-                                width: double.infinity,
-                                errorBuilder: (_, __, ___) => _bannerPlaceholder(),
-                              )
-                            : _bannerPlaceholder(),
-                  ),
-                ),
-                SizedBox(height: 6.h),
-                Text('Tap to ${_bannerBytes != null || (_existingBannerUrl?.isNotEmpty ?? false) ? 'change' : 'choose'} · 600×240 recommended · Max 500 KB',
-                    style: GoogleFonts.jost(fontSize: 11.sp, color: AppColors.hintTextColor)),
-                SizedBox(height: 12.h),
-                _label('On tap, open category (optional)'),
-                DropdownButtonFormField<int>(
-                  value: _linkCategoryId,
-                  isExpanded: true,
-                  decoration: _deco(),
-                  items: [
-                    const DropdownMenuItem<int>(value: null, child: Text('No link')),
-                    ...widget.categories.map<DropdownMenuItem<int>>((c) => DropdownMenuItem(
-                        value: c['id'] is int ? c['id'] : int.tryParse('${c['id']}'),
-                        child: Text(c['name'] ?? '', style: GoogleFonts.jost()))),
-                  ],
-                  onChanged: (v) => setState(() => _linkCategoryId = v),
-                ),
+                    child: Text('No banners yet. Add some in Banners first.',
+                        style: GoogleFonts.jost(fontSize: 12.sp, color: AppColors.secondaryTextColor)),
+                  )
+                else
+                  ...widget.banners.map(_bannerOption),
               ],
+            ],
+          ),
+    );
+  }
+
+  /// A selectable banner row: thumbnail + category + check.
+  Widget _bannerOption(dynamic b) {
+    final id = b['id'] is int ? b['id'] : int.tryParse('${b['id']}');
+    if (id == null) return const SizedBox.shrink();
+    final selected = _selectedBannerIds.contains(id);
+    final img = (b['banner_image'] ?? '').toString();
+    final cat = (b['main_category_name'] ?? b['category_name'] ?? 'Banner').toString();
+    return Padding(
+      padding: EdgeInsets.only(bottom: 8.h),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10.r),
+        onTap: () => setState(() {
+          selected ? _selectedBannerIds.remove(id) : _selectedBannerIds.add(id);
+        }),
+        child: Container(
+          decoration: BoxDecoration(
+            color: selected ? AppColors.primaryColor.withValues(alpha: 0.08) : AppColors.backgroundColor,
+            borderRadius: BorderRadius.circular(10.r),
+            border: Border.all(
+              color: selected ? AppColors.primaryColor : AppColors.borderColor,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          padding: EdgeInsets.all(8.w),
+          child: Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6.r),
+                child: SizedBox(
+                  width: 64.w,
+                  height: 40.h,
+                  child: img.isEmpty
+                      ? Container(color: AppColors.borderColor, child: Icon(Icons.image, size: 16.sp, color: AppColors.hintTextColor))
+                      : Image.network(img, fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(color: AppColors.borderColor, child: Icon(Icons.broken_image, size: 16.sp, color: AppColors.hintTextColor))),
+                ),
+              ),
+              SizedBox(width: 10.w),
+              Expanded(
+                child: Text(cat,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.jost(fontSize: 13.sp, fontWeight: FontWeight.w600)),
+              ),
+              Icon(
+                selected ? Icons.check_circle_rounded : Icons.radio_button_unchecked,
+                color: selected ? AppColors.primaryColor : AppColors.hintTextColor,
+                size: 20.sp,
+              ),
             ],
           ),
         ),
       ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: GoogleFonts.jost())),
-        FilledButton(
-          onPressed: _saving ? null : _save,
-          style: FilledButton.styleFrom(backgroundColor: AppColors.primaryColor),
-          child: _saving
-              ? SizedBox(width: 18.w, height: 18.w, child: const CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-              : Text(isEdit ? 'Update' : 'Add', style: GoogleFonts.jost(color: Colors.white)),
-        ),
-      ],
     );
   }
 
   Widget _label(String t) => Padding(
         padding: EdgeInsets.only(bottom: 6.h),
         child: Text(t, style: GoogleFonts.jost(fontSize: 12.sp, fontWeight: FontWeight.w600)),
-      );
-
-  Widget _bannerPlaceholder() => Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.add_photo_alternate_outlined, size: 30.sp, color: AppColors.hintTextColor),
-            SizedBox(height: 4.h),
-            Text('Choose image', style: GoogleFonts.jost(fontSize: 11.sp, color: AppColors.hintTextColor)),
-          ],
-        ),
       );
 
   InputDecoration _deco({String? hint}) => InputDecoration(

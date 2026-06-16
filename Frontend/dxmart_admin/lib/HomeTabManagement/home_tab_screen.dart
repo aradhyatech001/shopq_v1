@@ -220,20 +220,14 @@ class _HomeTabScreenState extends State<HomeTabScreen> {
     String? existingIconUrl = existing?['icon_image']?.toString();
     bool removeIconImage = false;
 
-    showDialog(
-      context: context,
+    showAdminSideSheet(
+      context,
       barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setS) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16.r),
-          ),
-          title: Text(
-            existing == null ? 'Add Tab' : 'Edit Tab',
-            style: GoogleFonts.jost(fontWeight: FontWeight.w700),
-          ),
-          content: SingleChildScrollView(
-            child: Column(
+      width: 480,
+      child: StatefulBuilder(
+        builder: (ctx, setS) => AdminSideSheet(
+          title: existing == null ? 'Add Tab' : 'Edit Tab',
+          child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -634,7 +628,6 @@ class _HomeTabScreenState extends State<HomeTabScreen> {
                 ),
               ],
             ),
-          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),

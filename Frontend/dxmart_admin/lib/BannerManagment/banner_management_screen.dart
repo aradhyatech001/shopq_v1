@@ -139,21 +139,13 @@ class _BannerManagementScreenState extends State<BannerManagementScreen> {
     String? editFileName;
     bool saving = false;
 
-    showDialog(
-      context: context,
+    showAdminSideSheet(
+      context,
       barrierDismissible: false,
-      builder: (_) => StatefulBuilder(
-        builder: (ctx, setS) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16.r),
-          ),
-          title: Text(
-            'Edit Banner',
-            style: GoogleFonts.jost(fontWeight: FontWeight.w700),
-          ),
-          content: SizedBox(
-            width: 400.w,
-            child: Column(
+      child: StatefulBuilder(
+        builder: (ctx, setS) => AdminSideSheet(
+          title: 'Edit Banner',
+          child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -223,7 +215,6 @@ class _BannerManagementScreenState extends State<BannerManagementScreen> {
                 ),
               ],
             ),
-          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),

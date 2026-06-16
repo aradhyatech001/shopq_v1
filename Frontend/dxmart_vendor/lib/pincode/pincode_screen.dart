@@ -6,6 +6,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../utils/api_constants.dart';
 import '../utils/colors.dart';
 import '../utils/vendor_api_helper.dart';
+import '../utils/vendor_widgets.dart';
 
 class PincodeScreen extends StatefulWidget {
   const PincodeScreen({super.key});
@@ -91,68 +92,32 @@ class _PincodeScreenState extends State<PincodeScreen> {
   Widget build(BuildContext context) {
     final filtered = _filtered;
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: _loading
+    return VendorPage(
+      title: 'Service Areas',
+      subtitle: '${_selectedIds.length} of ${_allPincodes.length} selected',
+      actions: [
+        FilledButton(
+          onPressed: _saving ? null : _save,
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.success,
+            padding: EdgeInsets.symmetric(horizontal: 18.w, vertical: 10.h),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10.r)),
+          ),
+          child: _saving
+              ? SizedBox(width: 18.w, height: 18.w, child: const CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+              : Text('Save', style: GoogleFonts.jost(fontWeight: FontWeight.w600, color: Colors.white)),
+        ),
+      ],
+      child: _loading
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // ── Page header ────────────────────────────────
-                Container(
-                  color: AppColors.background,
-                  padding: EdgeInsets.fromLTRB(20.w, 20.h, 20.w, 0),
+                // ── Search ─────────────────────────────────────
+                Padding(
+                  padding: EdgeInsets.fromLTRB(16.w, 14.h, 16.w, 8.h),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Service Areas',
-                                  style: GoogleFonts.jost(
-                                    fontSize: 22.sp,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.textPrimary,
-                                  ),
-                                ),
-                                Text(
-                                  '${_selectedIds.length} of ${_allPincodes.length} selected',
-                                  style: GoogleFonts.jost(
-                                    fontSize: 13.sp,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          // Save button
-                          FilledButton(
-                            onPressed: _saving ? null : _save,
-                            style: FilledButton.styleFrom(
-                              backgroundColor: AppColors.success,
-                              padding: EdgeInsets.symmetric(
-                                  horizontal: 20.w, vertical: 10.h),
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10.r)),
-                            ),
-                            child: _saving
-                                ? SizedBox(
-                                    width: 18.w, height: 18.w,
-                                    child: const CircularProgressIndicator(
-                                        color: Colors.white, strokeWidth: 2))
-                                : Text('Save',
-                                    style: GoogleFonts.jost(
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.white)),
-                          ),
-                        ],
-                      ),
-
-                      SizedBox(height: 14.h),
-
                       // Search bar
                       TextField(
                         onChanged: (v) => setState(() => _search = v),

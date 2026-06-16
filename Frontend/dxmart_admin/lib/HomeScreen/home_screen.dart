@@ -7,6 +7,7 @@ import '../Auth/login_screen.dart';
 import '../BannerManagment/banner_management_screen.dart';
 import '../CouponCodeManagment/coupanCodeScreen.dart';
 import '../Dashboard/dashboard_screen.dart';
+import '../DeliveryBoys/delivery_boys_screen.dart';
 import '../HomeTabManagement/home_tab_screen.dart';
 // import '../LocationScreen/locationManagementScreen.dart';
 import '../MainCategory/main_category.dart';
@@ -112,6 +113,11 @@ final List<_MenuItem> _menuItems = [
     icon: Icons.card_membership_rounded,
     label: 'Subscription Plans',
     screen: const SubscriptionPlansScreen(),
+  ),
+  _MenuItem(
+    icon: Icons.delivery_dining_rounded,
+    label: 'Delivery Boys',
+    screen: const DeliveryBoysScreen(),
   ),
   /*_MenuItem(
     icon: Icons.location_on_rounded,

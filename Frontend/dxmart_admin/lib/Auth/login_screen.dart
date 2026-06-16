@@ -75,8 +75,17 @@ class _LoginScreenState extends State<LoginScreen>
         },
       );
 
-      if (res.statusCode == 200) {
-        final data = jsonDecode(res.body);
+      // Parse the body for both success and error responses. The API now
+      // returns proper status codes (401 invalid, 422 missing) with a message,
+      // so don't treat non-200 as an opaque "server error".
+      Map<String, dynamic> data;
+      try {
+        data = jsonDecode(res.body) as Map<String, dynamic>;
+      } catch (_) {
+        data = {};
+      }
+
+      if (res.statusCode == 200 || data['status'] != null) {
         if (data['status'] == 'success') {
           // Save the Sanctum bearer token (sent as Authorization header by AdminApi)
           await SessionManager.saveSession(

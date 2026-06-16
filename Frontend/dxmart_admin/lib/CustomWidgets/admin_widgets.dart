@@ -416,6 +416,128 @@ class EmptyState extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Side sheet — a right-aligned full-height panel that replaces center dialogs.
+// Use showAdminSideSheet(...) with an AdminSideSheet child.
+// ─────────────────────────────────────────────────────────────────────────────
+Future<T?> showAdminSideSheet<T>(
+  BuildContext context, {
+  required Widget child,
+  double width = 460,
+  bool barrierDismissible = true,
+}) {
+  return showGeneralDialog<T>(
+    context: context,
+    barrierDismissible: barrierDismissible,
+    barrierLabel: 'Dismiss',
+    barrierColor: Colors.black.withValues(alpha: 0.45),
+    transitionDuration: const Duration(milliseconds: 260),
+    pageBuilder: (ctx, _, __) {
+      final screenW = MediaQuery.of(ctx).size.width;
+      final w = screenW < width + 40 ? screenW : width;
+      return Align(
+        alignment: Alignment.centerRight,
+        child: Material(
+          color: AppColors.surfaceColor,
+          elevation: 12,
+          child: SizedBox(width: w, height: double.infinity, child: child),
+        ),
+      );
+    },
+    transitionBuilder: (ctx, anim, _, child) => SlideTransition(
+      position: Tween(begin: const Offset(1, 0), end: Offset.zero)
+          .animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic)),
+      child: child,
+    ),
+  );
+}
+
+/// Standard layout for the content of a side sheet: sticky header with a close
+/// button, a scrollable body, and an optional sticky footer of actions.
+class AdminSideSheet extends StatelessWidget {
+  final String title;
+  final String? subtitle;
+  final Widget child;
+  final List<Widget>? actions;
+
+  const AdminSideSheet({
+    super.key,
+    required this.title,
+    this.subtitle,
+    required this.child,
+    this.actions,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Header
+        Container(
+          padding: EdgeInsets.fromLTRB(20.w, 16.h, 12.w, 16.h),
+          decoration: const BoxDecoration(
+            border: Border(bottom: BorderSide(color: AppColors.borderColor)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(title,
+                        style: GoogleFonts.jost(
+                            fontSize: 17.sp, fontWeight: FontWeight.w800),
+                        overflow: TextOverflow.ellipsis),
+                    if (subtitle != null) ...[
+                      SizedBox(height: 2.h),
+                      Text(subtitle!,
+                          style: GoogleFonts.jost(
+                              fontSize: 11.sp,
+                              color: AppColors.secondaryTextColor),
+                          overflow: TextOverflow.ellipsis),
+                    ],
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: Icon(Icons.close_rounded, size: 20.sp),
+                color: AppColors.secondaryTextColor,
+                onPressed: () => Navigator.of(context).maybePop(),
+              ),
+            ],
+          ),
+        ),
+        // Body (scrollable)
+        Expanded(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.all(20.w),
+            child: child,
+          ),
+        ),
+        // Footer actions
+        if (actions != null && actions!.isNotEmpty)
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
+            decoration: const BoxDecoration(
+              border: Border(top: BorderSide(color: AppColors.borderColor)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                for (int i = 0; i < actions!.length; i++) ...[
+                  if (i > 0) SizedBox(width: 10.w),
+                  actions![i],
+                ],
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Form label
 // ─────────────────────────────────────────────────────────────────────────────
 class FormLabel extends StatelessWidget {

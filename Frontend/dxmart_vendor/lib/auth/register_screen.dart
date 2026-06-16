@@ -1,5 +1,6 @@
 ﻿import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -278,6 +279,8 @@ class _RegisterScreenState extends State<RegisterScreen>
               'Phone number',
               Icons.phone_outlined,
               keyboardType: TextInputType.phone,
+              maxLength: 10,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             ),
             SizedBox(height: 22.h),
             _sectionTitle('Store details'),
@@ -430,11 +433,15 @@ class _RegisterScreenState extends State<RegisterScreen>
     TextInputType keyboardType = TextInputType.text,
     bool required = false,
     String? Function(String?)? validator,
+    int? maxLength,
+    List<TextInputFormatter>? inputFormatters,
   }) {
     return TextFormField(
       controller: ctrl,
       keyboardType: keyboardType,
-      decoration: _inputDeco(label, icon),
+      maxLength: maxLength,
+      inputFormatters: inputFormatters,
+      decoration: _inputDeco(label, icon).copyWith(counterText: ''),
       validator: validator ??
           (required
               ? (v) => (v == null || v.trim().isEmpty) ? 'Required' : null
@@ -473,11 +480,15 @@ class _RegisterScreenState extends State<RegisterScreen>
       fillColor: AppColors.surface,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14.r),
-        borderSide: BorderSide(color: AppColors.borderColor),
+        borderSide: const BorderSide(color: AppColors.borderColor),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14.r),
-        borderSide: BorderSide(color: AppColors.borderColor),
+        borderSide: const BorderSide(color: AppColors.borderColor),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14.r),
+        borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
       ),
       contentPadding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
     );

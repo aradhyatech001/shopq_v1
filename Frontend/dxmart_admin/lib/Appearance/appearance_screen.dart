@@ -32,6 +32,9 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
   bool _codEnabled = true;
   bool _onlineEnabled = false;
 
+  // Auto-slide banners when a section has more than one.
+  bool _bannerAutoplay = true;
+
   final List<_Field> _fields = [
     _Field('primary_color', 'Primary Color', isColor: true),
     _Field('secondary_color', 'Secondary Color', isColor: true),
@@ -42,6 +45,9 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
     _Field('assurance_1', 'Assurance 1'),
     _Field('assurance_2', 'Assurance 2'),
     _Field('assurance_3', 'Assurance 3'),
+    // Banner sizing (optional — leave blank to keep the app's defaults).
+    _Field('banner_height', 'Banner Height (optional, e.g. 140)'),
+    _Field('banner_radius', 'Banner Corner Radius (optional, e.g. 16)'),
   ];
 
   @override
@@ -68,6 +74,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
         }
         _codEnabled = '${cfg['payment_cod_enabled'] ?? '1'}' != '0';
         _onlineEnabled = '${cfg['payment_online_enabled'] ?? '0'}' == '1';
+        _bannerAutoplay = '${cfg['banner_autoplay'] ?? '1'}' != '0';
       }
     } catch (_) {
     } finally {
@@ -82,6 +89,7 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
         for (final f in _fields) f.key: f.ctrl.text.trim(),
         'payment_cod_enabled': _codEnabled ? '1' : '0',
         'payment_online_enabled': _onlineEnabled ? '1' : '0',
+        'banner_autoplay': _bannerAutoplay ? '1' : '0',
       };
       final res = await AdminApi.postJson(Uri.parse(ApiConstants.APP_CONFIG_UPDATE), body: body);
       final data = jsonDecode(res.body);
@@ -181,10 +189,10 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Payment Methods',
+          Text('Payment & Display',
               style: GoogleFonts.jost(fontSize: 16.sp, fontWeight: FontWeight.w700)),
           SizedBox(height: 2.h),
-          Text('Turn the options customers can use at checkout on or off.',
+          Text('Checkout payment options and banner behaviour.',
               style: GoogleFonts.jost(fontSize: 12.sp, color: AppColors.secondaryTextColor)),
           SizedBox(height: 8.h),
           SwitchListTile(
@@ -206,6 +214,17 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
             title: Text('Online Payment (UPI)',
                 style: GoogleFonts.jost(fontSize: 14.sp, fontWeight: FontWeight.w600)),
             subtitle: Text('Pay online via any UPI app',
+                style: GoogleFonts.jost(fontSize: 12.sp, color: AppColors.secondaryTextColor)),
+          ),
+          Divider(height: 1.h, color: AppColors.borderColor),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            activeColor: AppColors.primaryColor,
+            value: _bannerAutoplay,
+            onChanged: (v) => setState(() => _bannerAutoplay = v),
+            title: Text('Auto-slide banners',
+                style: GoogleFonts.jost(fontSize: 14.sp, fontWeight: FontWeight.w600)),
+            subtitle: Text('Carousel auto-plays when a section has multiple banners',
                 style: GoogleFonts.jost(fontSize: 12.sp, color: AppColors.secondaryTextColor)),
           ),
         ],

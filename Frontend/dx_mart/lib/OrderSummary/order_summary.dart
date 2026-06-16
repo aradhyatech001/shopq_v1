@@ -3,6 +3,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
+import '../utils/api_constants.dart';
 import '../utils/colors.dart';
 
 class OrderSummary extends StatelessWidget {
@@ -239,7 +240,11 @@ class OrderSummary extends StatelessWidget {
                                           ),
                                           child: Center(
                                             child: Image.network(
-                                              item['image_url'] ?? "",
+                                              ApiConstants.imageUrl(
+                                                item['image_url'] ??
+                                                    item['image'] ??
+                                                    "",
+                                              ),
                                               width: 40.w,
                                               height: 40.h,
                                               fit: BoxFit.contain,

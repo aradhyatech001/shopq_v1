@@ -17,20 +17,34 @@ class VendorApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ScreenUtilInit(
-      designSize: const Size(390, 844),
-      minTextAdapt: true,
-      useInheritedMediaQuery: true,
-      builder: (context, child) => MaterialApp(
-        title: 'DxMart Vendor',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.theme,
-        routes: {
-          '/home': (_) => const HomeScreen(),
-          '/login': (_) => const LoginScreen(),
-        },
-        home: const SplashScreen(),
-      ),
+    // The vendor app runs on both phones and the web/desktop. ScreenUtil scales
+    // every .w/.h/.sp by (screenWidth / designWidth); a phone design size on a
+    // ~1366px desktop blows everything up ~3.5×. Pick the design size to match
+    // the form factor so 1 logical unit ≈ 1 px on each.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final w = constraints.maxWidth;
+        final Size design = w >= 1100
+            ? const Size(1366, 768)   // desktop (matches the admin panel)
+            : w >= 600
+                ? const Size(834, 1112) // tablet
+                : const Size(390, 844); // phone
+        return ScreenUtilInit(
+          designSize: design,
+          minTextAdapt: true,
+          splitScreenMode: true,
+          builder: (context, child) => MaterialApp(
+            title: 'DxMart Vendor',
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.theme,
+            routes: {
+              '/home': (_) => const HomeScreen(),
+              '/login': (_) => const LoginScreen(),
+            },
+            home: const SplashScreen(),
+          ),
+        );
+      },
     );
   }
 }

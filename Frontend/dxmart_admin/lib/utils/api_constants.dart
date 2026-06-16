@@ -140,6 +140,12 @@ class ApiConstants {
   static const String ADMIN_VENDOR_SUSPEND = "$BASE_URL/admin/vendors/suspend";
   static const String ADMIN_VENDOR_DELETE  = "$BASE_URL/admin/vendors/delete";
 
+  // ── Delivery Boys (platform pool) ──────────────────
+  static const String ADMIN_DELIVERY_BOYS        = "$BASE_URL/admin/delivery-boys";
+  static const String ADMIN_DELIVERY_BOYS_ADD    = "$BASE_URL/admin/delivery-boys/add";
+  static const String ADMIN_DELIVERY_BOYS_EDIT   = "$BASE_URL/admin/delivery-boys/edit";
+  static const String ADMIN_DELIVERY_BOYS_DELETE = "$BASE_URL/admin/delivery-boys/delete";
+
   // ── Subscription Plans ─────────────────────────────
   static const String ADMIN_PLANS        = "$BASE_URL/admin/subscription-plans";
   static const String ADMIN_PLANS_ADD    = "$BASE_URL/admin/subscription-plans/add";
