@@ -21,12 +21,14 @@ class HomeSectionController extends Controller
         $tabId = (int) $request->query('tab_id', 0);
         $tab   = $tabId ? HomeTab::find($tabId) : null;
         $tabCategoryId = $tab?->category_id;
+        // Only show stores/products deliverable to the user's chosen pincode.
+        $pincodeId = $this->resolvePincodeId($request);
 
         $sections = HomeSection::where('is_active', 1)
             ->where('home_tab_id', $tabId)
             ->orderBy('position')->orderBy('id')
             ->get()
-            ->map(fn($s) => $this->resolve($s, $tabCategoryId))
+            ->map(fn($s) => $this->resolve($s, $tabCategoryId, $pincodeId))
             ->filter()
             ->values();
 
@@ -34,7 +36,7 @@ class HomeSectionController extends Controller
     }
 
     /// Turns a stored section config into a render-ready payload.
-    private function resolve(HomeSection $s, $tabCategoryId): ?array
+    private function resolve(HomeSection $s, $tabCategoryId, int $pincodeId = 0): ?array
     {
         // A section may scope to its own category, else it inherits the tab's.
         $categoryId = $s->main_category_id ?: $tabCategoryId;
@@ -116,9 +118,13 @@ class HomeSectionController extends Controller
                 return ['type' => 'brand_grid', 'title' => $s->title, 'items' => $items];
 
             case 'shop_grid':
-                // "Shop-wise shopping" — approved vendor shops.
-                $shops = \App\Models\Vendor::where('status', 'approved')
-                    ->orderByDesc('id')->limit($s->product_limit ?: 12)->get()
+                // "Shop-wise shopping" — approved vendor shops serving the
+                // user's pincode (all approved shops when no pincode is set).
+                $shopQuery = \App\Models\Vendor::where('status', 'approved');
+                if ($pincodeId > 0) {
+                    $shopQuery->whereHas('pincodes', fn($p) => $p->where('pincodes.id', $pincodeId));
+                }
+                $shops = $shopQuery->orderByDesc('id')->limit($s->product_limit ?: 12)->get()
                     ->map(fn($v) => [
                         'id'        => $v->id,
                         'shop_name' => $v->shop_name ?: $v->name,
@@ -132,6 +138,7 @@ class HomeSectionController extends Controller
             case 'brand_row':
                 $q = Product::with(['category:id,name,image', 'subcategory:id,name', 'variants', 'info', 'highlights', 'images'])
                     ->visible()
+                    ->servingPincode($pincodeId)
                     ->where('is_active', 1);
                 if ($categoryId)        $q->where('main_category_id', $categoryId);
                 if ($s->subcategory_id) $q->where('subcategory_id', $s->subcategory_id);

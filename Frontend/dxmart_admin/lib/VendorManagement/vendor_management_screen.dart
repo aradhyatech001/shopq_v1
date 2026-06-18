@@ -23,6 +23,9 @@ class _VendorManagementScreenState extends State<VendorManagementScreen>
   List _vendors = [];
   bool _loading = false;
 
+  // Master-detail: selected vendor shown in the right split panel.
+  Map? _selected;
+
   // Stats
   int _totalCount   = 0;
   int _pendingCount = 0;
@@ -68,7 +71,15 @@ class _VendorManagementScreenState extends State<VendorManagementScreen>
       final res = await AdminApi.get(uri);
       final data = jsonDecode(res.body);
       if (data['success'] == true && mounted) {
-        setState(() => _vendors = data['data'] ?? data['vendors'] ?? []);
+        setState(() {
+          _vendors = data['data'] ?? data['vendors'] ?? [];
+          // Re-resolve the selected vendor against the fresh list (status may have changed).
+          if (_selected != null) {
+            final id = _selected!['id'];
+            _selected = _vendors.cast<Map?>().firstWhere(
+                (v) => v?['id'] == id, orElse: () => null);
+          }
+        });
       }
     } catch (_) {
     } finally {
@@ -145,58 +156,111 @@ class _VendorManagementScreenState extends State<VendorManagementScreen>
     );
   }
 
-  void _showVendorDetails(Map vendor) {
-    showDialog(
-      context: context,
-      builder: (_) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.r)),
-        child: Container(
-          width: 480.w,
-          padding: EdgeInsets.all(24.w),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(children: [
-                CircleAvatar(
-                  radius: 28.r,
-                  backgroundColor: AppColors.primaryLight,
-                  backgroundImage: vendor['logo'] != null && vendor['logo'].toString().isNotEmpty
-                      ? NetworkImage(vendor['logo'])
-                      : null,
-                  child: vendor['logo'] == null || vendor['logo'].toString().isEmpty
-                      ? Icon(Icons.store, color: AppColors.primaryColor, size: 28.sp)
-                      : null,
-                ),
-                SizedBox(width: 16.w),
-                Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(vendor['shop_name'] ?? '', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 16.sp)),
-                    Text(vendor['name'] ?? '', style: GoogleFonts.poppins(color: AppColors.secondaryTextColor, fontSize: 13.sp)),
-                  ]),
-                ),
-                _statusChip(vendor['status'] ?? ''),
+  // Right split panel — shows the selected vendor's details + actions.
+  Widget _buildDetailPanel() {
+    final vendor = _selected;
+    if (vendor == null) {
+      return Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.touch_app_outlined, size: 48.sp, color: AppColors.hintTextColor),
+          SizedBox(height: 12.h),
+          Text('Select a vendor to view details',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(color: AppColors.secondaryTextColor, fontSize: 13.sp)),
+        ]),
+      );
+    }
+    final status = (vendor['status'] ?? '').toString();
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(20.w),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            CircleAvatar(
+              radius: 28.r,
+              backgroundColor: AppColors.primaryLight,
+              backgroundImage: vendor['logo'] != null && vendor['logo'].toString().isNotEmpty
+                  ? NetworkImage(vendor['logo'])
+                  : null,
+              child: vendor['logo'] == null || vendor['logo'].toString().isEmpty
+                  ? Icon(Icons.store, color: AppColors.primaryColor, size: 28.sp)
+                  : null,
+            ),
+            SizedBox(width: 16.w),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(vendor['shop_name'] ?? '', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 16.sp)),
+                Text(vendor['name'] ?? '', style: GoogleFonts.poppins(color: AppColors.secondaryTextColor, fontSize: 13.sp)),
               ]),
-              Divider(height: 24.h),
-              _detailRow(Icons.email_outlined, vendor['email'] ?? ''),
-              if ((vendor['phone'] ?? '').isNotEmpty) _detailRow(Icons.phone_outlined, vendor['phone']),
-              if ((vendor['shop_description'] ?? '').isNotEmpty)
-                _detailRow(Icons.description_outlined, vendor['shop_description']),
-              SizedBox(height: 8.h),
-              if (vendor['active_subscription'] != null) ...[
-                Text('Subscription', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13.sp)),
-                SizedBox(height: 4.h),
-                _detailRow(Icons.card_membership_outlined,
-                    '${vendor['active_subscription']['plan_name']} · expires ${vendor['active_subscription']['end_date']}'),
-              ],
-              SizedBox(height: 16.h),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+            ),
+            _statusChip(status),
+          ]),
+          Divider(height: 24.h),
+          _detailRow(Icons.email_outlined, vendor['email'] ?? ''),
+          if ((vendor['phone'] ?? '').toString().isNotEmpty) _detailRow(Icons.phone_outlined, vendor['phone']),
+          if ((vendor['shop_description'] ?? '').toString().isNotEmpty)
+            _detailRow(Icons.description_outlined, vendor['shop_description']),
+          SizedBox(height: 8.h),
+          if (vendor['active_subscription'] != null) ...[
+            Text('Subscription', style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13.sp)),
+            SizedBox(height: 4.h),
+            _detailRow(Icons.card_membership_outlined,
+                '${vendor['active_subscription']['plan_name']} · expires ${vendor['active_subscription']['end_date']}'),
+          ],
+          SizedBox(height: 20.h),
+          // Actions
+          Wrap(
+            spacing: 8.w,
+            runSpacing: 8.h,
+            children: [
+              if (status != 'approved')
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                  onPressed: () => _approve(vendor['id'] as int),
+                  icon: const Icon(Icons.check, size: 16, color: Colors.white),
+                  label: const Text('Approve', style: TextStyle(color: Colors.white)),
+                ),
+              if (status != 'rejected')
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                  onPressed: () => _showRejectDialog(vendor['id'] as int),
+                  icon: const Icon(Icons.close, size: 16, color: Colors.white),
+                  label: const Text('Reject', style: TextStyle(color: Colors.white)),
+                ),
+              if (status == 'approved')
+                OutlinedButton.icon(
+                  onPressed: () => _suspend(vendor['id'] as int),
+                  icon: const Icon(Icons.pause, size: 16),
+                  label: const Text('Suspend'),
+                ),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+                onPressed: () => _confirmDelete(vendor['id'] as int),
+                icon: const Icon(Icons.delete_outline, size: 16),
+                label: const Text('Delete'),
               ),
             ],
           ),
-        ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDelete(int id) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text('Delete Vendor', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+        content: const Text('This action cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () { Navigator.pop(context); _delete(id); },
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }
@@ -220,7 +284,16 @@ class _VendorManagementScreenState extends State<VendorManagementScreen>
           _buildHeader(),
           _buildStats(),
           _buildTabBar(),
-          Expanded(child: _buildList()),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 3, child: _buildList()),
+                const VerticalDivider(width: 1),
+                SizedBox(width: 360.w, child: _buildDetailPanel()),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -302,12 +375,13 @@ class _VendorManagementScreenState extends State<VendorManagementScreen>
 
   Widget _vendorCard(Map vendor) {
     final status = vendor['status'] ?? '';
+    final selected = _selected != null && _selected!['id'] == vendor['id'];
     return Material(
-      color: AppColors.surfaceColor,
+      color: selected ? AppColors.primaryLight : AppColors.surfaceColor,
       borderRadius: BorderRadius.circular(12.r),
       child: InkWell(
         borderRadius: BorderRadius.circular(12.r),
-        onTap: () => _showVendorDetails(vendor),
+        onTap: () => setState(() => _selected = vendor),
         child: Padding(
           padding: EdgeInsets.all(16.w),
           child: Row(children: [
@@ -332,47 +406,11 @@ class _VendorManagementScreenState extends State<VendorManagementScreen>
               ]),
             ),
             _statusChip(status),
-            SizedBox(width: 8.w),
-            _buildActions(vendor, status),
+            SizedBox(width: 4.w),
+            Icon(Icons.chevron_right_rounded, color: AppColors.hintTextColor, size: 22.sp),
           ]),
         ),
       ),
-    );
-  }
-
-  Widget _buildActions(Map vendor, String status) {
-    final id = vendor['id'] as int;
-    return PopupMenuButton<String>(
-      icon: const Icon(Icons.more_vert),
-      onSelected: (val) {
-        switch (val) {
-          case 'approve': _approve(id); break;
-          case 'reject':  _showRejectDialog(id); break;
-          case 'suspend': _suspend(id); break;
-          case 'delete':
-            showDialog(
-              context: context,
-              builder: (_) => AlertDialog(
-                title: Text('Delete Vendor', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-                content: const Text('This action cannot be undone.'),
-                actions: [
-                  TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                    onPressed: () { Navigator.pop(context); _delete(id); },
-                    child: const Text('Delete', style: TextStyle(color: Colors.white)),
-                  ),
-                ],
-              ),
-            );
-        }
-      },
-      itemBuilder: (_) => [
-        if (status != 'approved') const PopupMenuItem(value: 'approve', child: Text('✅ Approve')),
-        if (status != 'rejected') const PopupMenuItem(value: 'reject',  child: Text('❌ Reject')),
-        if (status == 'approved') const PopupMenuItem(value: 'suspend', child: Text('⏸ Suspend')),
-        const PopupMenuItem(value: 'delete', child: Text('🗑 Delete')),
-      ],
     );
   }
 

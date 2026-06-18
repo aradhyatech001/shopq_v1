@@ -1,12 +1,15 @@
 class ApiConstants {
   static const String BASE_URL = "http://192.168.1.4:8000/api";
   static const String BASE_IMAGE_URL = "http://192.168.1.4:8000/storage/";
+  // static const String BASE_URL = "https://shopq.solarsunshakti.com/api";
+  // static const String BASE_IMAGE_URL = "https://shopq.solarsunshakti.com/storage/";
 
   static const String LOGIN          = "$BASE_URL/delivery/login";
   static const String LOGOUT         = "$BASE_URL/delivery/logout";
   static const String PROFILE        = "$BASE_URL/delivery/profile";
   static const String ORDERS         = "$BASE_URL/delivery/orders";
   static const String UPDATE_STATUS  = "$BASE_URL/delivery/orders/update-status";
+  static const String CONFIRM_COD    = "$BASE_URL/delivery/orders/confirm-cod";
 
   /// Resolves an image value into a loadable URL (backend usually returns a
   /// full URL already; a relative path gets the storage host prefixed).

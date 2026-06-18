@@ -12,4 +12,9 @@ class Refund extends Model
         'parent_order_id', 'vendor_order_id', 'amount', 'reason',
         'status', 'processed_at',
     ];
+
+    public function order()
+    {
+        return $this->belongsTo(Order::class, 'parent_order_id');
+    }
 }

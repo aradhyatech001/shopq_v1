@@ -40,6 +40,21 @@ class Product extends Model
         });
     }
 
+    /// Narrows to products deliverable to a given pincode: platform products
+    /// (no vendor — available everywhere) plus products from approved vendors
+    /// that serve the pincode. A pincode id of 0/null applies no filter.
+    public function scopeServingPincode($query, $pincodeId) {
+        $pid = (int) $pincodeId;
+        if ($pid <= 0) return $query;
+        return $query->where(function ($q) use ($pid) {
+            $q->whereNull('vendor_id')
+              ->orWhereHas('vendor', function ($v) use ($pid) {
+                  $v->where('status', 'approved')
+                    ->whereHas('pincodes', fn($p) => $p->where('pincodes.id', $pid));
+              });
+        });
+    }
+
     public function variants() {
         return $this->hasMany(ProductVariant::class, 'product_id');
     }

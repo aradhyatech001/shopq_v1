@@ -14,6 +14,7 @@ import '../BottomNav/Screens/cartScreen.dart';
 import '../CategoryViewScreen/categoryViewScreen.dart';
 import '../CustomWidgets/cart_provider.dart';
 import '../CustomWidgets/product_card.dart';
+import '../CustomWidgets/skeletons.dart';
 import '../SearchProduct/search_product.dart';
 import '../SimilarProducts/similar_product.dart';
 import '../utils/api_constants.dart';
@@ -488,17 +489,11 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                       (context, child, loadingProgress) {
                                         if (loadingProgress == null)
                                           return child;
-                                        return Center(
-                                          child: CircularProgressIndicator(
-                                            value:
-                                                loadingProgress
-                                                        .expectedTotalBytes !=
-                                                    null
-                                                ? loadingProgress
-                                                          .cumulativeBytesLoaded /
-                                                      loadingProgress
-                                                          .expectedTotalBytes!
-                                                : null,
+                                        return const Skeleton(
+                                          child: SkeletonBox(
+                                            width: double.infinity,
+                                            height: double.infinity,
+                                            radius: 16,
                                           ),
                                         );
                                       },

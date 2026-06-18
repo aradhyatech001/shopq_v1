@@ -96,6 +96,12 @@ class ApiConstants {
   // ── Orders ────────────────────────────────────────
   static const String PLACE_ORDER = "$BASE_URL/orders/place";
   static const String GET_ORDER_BY_USER = "$BASE_URL/orders/by-user";
+  static String cancelOrder(int id) => "$BASE_URL/orders/$id/cancel";
+  static String orderHistory(int id) => "$BASE_URL/orders/$id/history";
+
+  // ── Refunds ───────────────────────────────────────
+  static const String REQUEST_REFUND = "$BASE_URL/refunds/request";
+  static const String MY_REFUNDS     = "$BASE_URL/refunds/my";
   static const String GET_ALL_ORDERS = "$BASE_URL/orders";
   static const String ORDER_DASHBOARD = "$BASE_URL/orders/dashboard";
   static const String UPDATE_ORDER_STATUS = "$BASE_URL/orders/update-status";

@@ -24,6 +24,8 @@ use App\Http\Controllers\PincodeController;
 use App\Http\Controllers\AppConfigController;
 use App\Http\Controllers\HomeSectionController;
 use App\Http\Controllers\DeliveryController;
+use App\Http\Controllers\RefundController;
+use App\Http\Controllers\PayoutController;
 
 // ─────────────────────────────────────────────
 // PUBLIC ROUTES
@@ -36,13 +38,14 @@ Route::get('/test', function () {
     ]);
 });
 
-// User auth
-Route::post('/auth/signup',           [AuthController::class, 'signup']);
-Route::post('/auth/login',            [AuthController::class, 'login']);
-Route::post('/auth/forgot-password',  [AuthController::class, 'forgotPassword']);
-Route::post('/auth/verify-otp',       [AuthController::class, 'verifyOtp']);
-Route::post('/auth/reset-password',   [AuthController::class, 'resetPassword']);
-Route::get('/auth/user',              [AuthController::class, 'getUser']);
+// User auth — throttle login/OTP/password endpoints (5 attempts per minute)
+Route::middleware('throttle:5,1')->group(function () {
+    Route::post('/auth/signup',          [AuthController::class, 'signup']);
+    Route::post('/auth/login',           [AuthController::class, 'login']);
+    Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword']);
+    Route::post('/auth/verify-otp',      [AuthController::class, 'verifyOtp']);
+    Route::post('/auth/reset-password',  [AuthController::class, 'resetPassword']);
+});
 
 // Banners & Categories (read)
 Route::get('/banners',                [BannerController::class, 'view']);
@@ -96,18 +99,6 @@ Route::get('/subscription-plans',     [SubscriptionPlanController::class, 'view'
 // App config / theme (read) — drives admin-controlled user-app appearance
 Route::get('/app-config',             [AppConfigController::class, 'get']);
 
-// Cart (user_id-based, no token needed)
-Route::post('/cart/add',              [CartController::class, 'add']);
-Route::get('/cart',                   [CartController::class, 'get']);
-Route::get('/cart/remove',            [CartController::class, 'remove']);
-Route::post('/cart/update-quantity',  [CartController::class, 'updateQuantity']);
-
-// Wishlist (user_id-based, no token needed)
-Route::post('/wishlist/add',          [WishlistController::class, 'add']);
-Route::get('/wishlist',               [WishlistController::class, 'get']);
-Route::get('/wishlist/check',         [WishlistController::class, 'check']);
-Route::post('/wishlist/remove',       [WishlistController::class, 'remove']);
-
 // Vendor Auth (public)
 Route::post('/vendor/register',       [VendorAuthController::class, 'register']);
 Route::post('/vendor/login',          [VendorAuthController::class, 'login']);
@@ -135,6 +126,21 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/auth/logout',           [AuthController::class, 'logout']);
     Route::post('/auth/edit-profile',     [AuthController::class, 'editProfile']);
+    // Authenticated user profile lookup (replaces the public /auth/user endpoint).
+    // Returns only id + name — no status or registration date.
+    Route::get('/auth/user',              [AuthController::class, 'getUser']);
+
+    // Cart — auth required; user_id always derived from token in controller
+    Route::post('/cart/add',              [CartController::class, 'add']);
+    Route::get('/cart',                   [CartController::class, 'get']);
+    Route::get('/cart/remove',            [CartController::class, 'remove']);
+    Route::post('/cart/update-quantity',  [CartController::class, 'updateQuantity']);
+
+    // Wishlist — auth required; user_id always derived from token in controller
+    Route::post('/wishlist/add',          [WishlistController::class, 'add']);
+    Route::get('/wishlist',               [WishlistController::class, 'get']);
+    Route::get('/wishlist/check',         [WishlistController::class, 'check']);
+    Route::post('/wishlist/remove',       [WishlistController::class, 'remove']);
 
     // Delivery Address
     Route::post('/address/add',           [DeliveryAddressController::class, 'add']);
@@ -145,8 +151,14 @@ Route::middleware('auth:sanctum')->group(function () {
     // Orders (user)
     Route::post('/orders/place',          [OrderController::class, 'place']);
     Route::post('/orders/by-user',        [OrderController::class, 'getByUser']);
-    // NOTE: orders/{id} must be defined AFTER all named sub-paths to avoid wildcard capture
+    // NOTE: orders/{id} sub-paths must be defined BEFORE the wildcard catch-all below
+    Route::post('/orders/{id}/cancel',    [OrderController::class, 'cancel'])->where('id', '[0-9]+');
+    Route::get('/orders/{id}/history',    [OrderController::class, 'getHistory'])->where('id', '[0-9]+');
     Route::get('/orders/{id}',            [OrderController::class, 'getSingle'])->where('id', '[0-9]+');
+
+    // Refunds (user)
+    Route::post('/refunds/request',       [RefundController::class, 'request']);
+    Route::get('/refunds/my',             [RefundController::class, 'my']);
 
     // Pincode
     Route::post('/auth/set-pincode',      [PincodeController::class, 'setUserPincode']);
@@ -242,6 +254,7 @@ Route::middleware('auth:admin')->group(function () {
     Route::post('/home-tabs/reorder',          [HomeTabController::class, 'reorder']);
 
     // Products (write)
+    Route::get('/admin/products/low-stock',    [ProductController::class, 'lowStock']);
     Route::post('/products/insert',            [ProductController::class, 'insert']);
     Route::post('/products/update',            [ProductController::class, 'update']);
     Route::post('/products/delete',            [ProductController::class, 'delete']);
@@ -257,7 +270,19 @@ Route::middleware('auth:admin')->group(function () {
     Route::get('/orders/dashboard',            [OrderController::class, 'getAllDashboard']);
     Route::post('/orders/update-status',       [OrderController::class, 'updateStatus']);
     Route::get('/orders/sales-report',         [OrderController::class, 'getSalesReport']);
+    Route::get('/orders/{id}/settlement',      [OrderController::class, 'getSettlement'])->where('id', '[0-9]+');
     Route::post('/orders/assign',              [OrderController::class, 'assign']);
+
+    // Refunds (admin)
+    Route::get('/admin/refunds',               [RefundController::class, 'adminIndex']);
+    Route::post('/admin/refunds/approve',      [RefundController::class, 'approve']);
+    Route::post('/admin/refunds/reject',       [RefundController::class, 'reject']);
+
+    // Payouts (admin)
+    Route::get('/admin/payouts',               [PayoutController::class, 'index']);
+    Route::get('/admin/payouts/pending-earnings', [PayoutController::class, 'pendingEarnings']);
+    Route::post('/admin/payouts/create',       [PayoutController::class, 'create']);
+    Route::post('/admin/payouts/mark-paid',    [PayoutController::class, 'markPaid']);
     Route::get('/orders/delivery',             [OrderController::class, 'fetchDeliveryOrders']);
     Route::get('/delivery-boys',               [OrderController::class, 'getDeliveryBoys']);
 
@@ -311,6 +336,7 @@ Route::middleware('auth:vendor')->group(function () {
     Route::post('/vendor/subscribe',             [SubscriptionPlanController::class, 'subscribe']);
 
     Route::get('/vendor/products',               [VendorProductController::class, 'index']);
+    Route::get('/vendor/products/low-stock',     [VendorProductController::class, 'lowStock']);
     Route::get('/vendor/products/single',        [VendorProductController::class, 'single']);
     Route::post('/vendor/products/insert',       [VendorProductController::class, 'insert']);
     Route::post('/vendor/products/update',       [VendorProductController::class, 'update']);
@@ -321,6 +347,9 @@ Route::middleware('auth:vendor')->group(function () {
     Route::post('/vendor/products/variant',      [VendorProductController::class, 'saveVariant']);
     Route::post('/vendor/products/highlight',    [VendorProductController::class, 'saveHighlight']);
     Route::post('/vendor/products/info',         [VendorProductController::class, 'saveInfo']);
+
+    // Vendor payout history
+    Route::get('/vendor/payouts',                [PayoutController::class, 'vendorIndex']);
 
     Route::get('/vendor/dashboard',              [VendorProductController::class, 'dashboard']);
     Route::get('/vendor/orders',                 [VendorProductController::class, 'orders']);
@@ -338,8 +367,9 @@ Route::middleware('auth:vendor')->group(function () {
 // ─────────────────────────────────────────────
 
 Route::middleware('auth:delivery')->group(function () {
-    Route::post('/delivery/logout',              [DeliveryController::class, 'logout']);
-    Route::get('/delivery/profile',              [DeliveryController::class, 'profile']);
-    Route::get('/delivery/orders',               [DeliveryController::class, 'orders']);
-    Route::post('/delivery/orders/update-status',[DeliveryController::class, 'updateStatus']);
+    Route::post('/delivery/logout',               [DeliveryController::class, 'logout']);
+    Route::get('/delivery/profile',               [DeliveryController::class, 'profile']);
+    Route::get('/delivery/orders',                [DeliveryController::class, 'orders']);
+    Route::post('/delivery/orders/update-status', [DeliveryController::class, 'updateStatus']);
+    Route::post('/delivery/orders/confirm-cod',   [DeliveryController::class, 'confirmCod']);
 });

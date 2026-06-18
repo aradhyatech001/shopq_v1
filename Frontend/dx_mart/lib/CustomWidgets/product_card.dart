@@ -1,4 +1,5 @@
 import 'package:fluttertoast/fluttertoast.dart';
+import 'motion.dart';
 import '../utils/api_helper.dart';
 import 'package:flutter/material.dart';
 import 'dart:convert';
@@ -836,9 +837,8 @@ class _ProductCardState extends State<ProductCard> {
       );
     } else {
       // 'Add to Cart' button
-      return GestureDetector(
+      return PressableScale(
         onTap: () {
-          // Check if product is in stock before adding
           if (stock <= 0) {
             _showToastMessage('Product is out of stock');
           } else {

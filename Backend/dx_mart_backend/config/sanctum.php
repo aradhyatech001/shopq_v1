@@ -54,7 +54,8 @@ return [
     |
     */
 
-    'expiration' => null,
+    // Tokens expire after 7 days of inactivity. Users must log in again.
+    'expiration' => 60 * 24 * 7,
 
     /*
     |--------------------------------------------------------------------------

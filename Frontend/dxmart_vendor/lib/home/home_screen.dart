@@ -6,6 +6,7 @@ import '../auth/login_screen.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../delivery/delivery_boys_screen.dart';
 import '../orders/orders_screen.dart';
+import '../payouts/payout_history_screen.dart';
 import '../pincode/pincode_screen.dart';
 import '../products/products_screen.dart';
 import '../profile/profile_screen.dart';
@@ -47,22 +48,24 @@ class _HomeScreenState extends State<HomeScreen> {
     PincodeScreen(),
     SubscriptionScreen(),
     ProfileScreen(),
-    DeliveryBoysScreen(), // index 6 — appended so the mobile bottom-nav stays intact
+    DeliveryBoysScreen(),    // index 6 — appended so the mobile bottom-nav stays intact
+    PayoutHistoryScreen(),   // index 7
   ];
 
   static const List<_MenuItem> _menuItems = [
     _MenuItem(label: 'OVERVIEW', isGroupHeader: true),
-    _MenuItem(icon: Icons.dashboard_outlined,      label: 'Dashboard',    screenIndex: 0),
+    _MenuItem(icon: Icons.dashboard_outlined,              label: 'Dashboard',      screenIndex: 0),
     _MenuItem(label: 'CATALOG', isGroupHeader: true),
-    _MenuItem(icon: Icons.inventory_2_outlined,    label: 'Products',     screenIndex: 1),
+    _MenuItem(icon: Icons.inventory_2_outlined,            label: 'Products',       screenIndex: 1),
     _MenuItem(label: 'OPERATIONS', isGroupHeader: true),
-    _MenuItem(icon: Icons.receipt_long_outlined,   label: 'Orders',       screenIndex: 2),
+    _MenuItem(icon: Icons.receipt_long_outlined,           label: 'Orders',         screenIndex: 2),
+    _MenuItem(icon: Icons.account_balance_wallet_outlined, label: 'Payouts',        screenIndex: 7),
     _MenuItem(label: 'DELIVERY', isGroupHeader: true),
-    _MenuItem(icon: Icons.location_on_outlined,    label: 'Pincodes',     screenIndex: 3),
-    _MenuItem(icon: Icons.delivery_dining_rounded, label: 'Delivery Boys',screenIndex: 6),
-    _MenuItem(icon: Icons.card_membership_rounded, label: 'Subscription', screenIndex: 4),
+    _MenuItem(icon: Icons.location_on_outlined,            label: 'Pincodes',       screenIndex: 3),
+    _MenuItem(icon: Icons.delivery_dining_rounded,         label: 'Delivery Boys',  screenIndex: 6),
+    _MenuItem(icon: Icons.card_membership_rounded,         label: 'Subscription',   screenIndex: 4),
     _MenuItem(label: 'ACCOUNT', isGroupHeader: true),
-    _MenuItem(icon: Icons.person_outline_rounded,  label: 'Profile',      screenIndex: 5),
+    _MenuItem(icon: Icons.person_outline_rounded,          label: 'Profile',        screenIndex: 5),
   ];
 
   void _select(int index) => setState(() => _selectedIndex = index);
@@ -79,6 +82,106 @@ class _HomeScreenState extends State<HomeScreen> {
       context,
       MaterialPageRoute(builder: (_) => const LoginScreen()),
       (_) => false,
+    );
+  }
+
+  Widget _mobileDrawer() {
+    return Drawer(
+      backgroundColor: AppColors.sidebarColor,
+      child: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 12.h),
+              child: Row(
+                children: [
+                  Container(
+                    width: 38.w,
+                    height: 38.w,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(10.r),
+                    ),
+                    child: Icon(Icons.store_rounded, color: Colors.white, size: 20.sp),
+                  ),
+                  SizedBox(width: 10.w),
+                  Text('DxMart Vendor',
+                      style: GoogleFonts.jost(
+                          color: Colors.white, fontSize: 15.sp, fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ),
+            Divider(color: AppColors.sidebarBorder, height: 1),
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.symmetric(vertical: 6.h),
+                children: [
+                  for (final item in _menuItems)
+                    if (item.isGroupHeader)
+                      Padding(
+                        padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 4.h),
+                        child: Text(item.label,
+                            style: GoogleFonts.jost(
+                                fontSize: 10.sp,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1.1,
+                                color: AppColors.sidebarTextColor.withValues(alpha: 0.5))),
+                      )
+                    else
+                      _drawerTile(item),
+                ],
+              ),
+            ),
+            Divider(color: AppColors.sidebarBorder, height: 1),
+            InkWell(
+              onTap: () {
+                Navigator.pop(context);
+                _logout();
+              },
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 14.h),
+                child: Row(children: [
+                  Icon(Icons.logout_rounded, size: 20.sp, color: AppColors.error),
+                  SizedBox(width: 12.w),
+                  Text('Logout',
+                      style: GoogleFonts.jost(
+                          fontSize: 14.sp, fontWeight: FontWeight.w600, color: AppColors.error)),
+                ]),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _drawerTile(_MenuItem item) {
+    final selected = _selectedIndex == item.screenIndex;
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 2.h),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10.r),
+        onTap: () {
+          _select(item.screenIndex!);
+          Navigator.pop(context);
+        },
+        child: Container(
+          padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 11.h),
+          decoration: BoxDecoration(
+            color: selected ? AppColors.sidebarSelected : Colors.transparent,
+            borderRadius: BorderRadius.circular(10.r),
+          ),
+          child: Row(children: [
+            Icon(item.icon, size: 20.sp, color: selected ? Colors.white : AppColors.sidebarTextColor),
+            SizedBox(width: 12.w),
+            Text(item.label,
+                style: GoogleFonts.jost(
+                    fontSize: 14.sp,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    color: selected ? Colors.white : AppColors.sidebarTextColor)),
+          ]),
+        ),
+      ),
     );
   }
 
@@ -110,9 +213,11 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    // Mobile layout
+    // Mobile layout — drawer gives access to every screen (incl. Delivery Boys,
+    // Subscription) that don't fit in the 5-slot bottom bar.
     return Scaffold(
       backgroundColor: AppColors.background,
+      drawer: _mobileDrawer(),
       body: IndexedStack(
         index: _selectedIndex,
         children: _screens,

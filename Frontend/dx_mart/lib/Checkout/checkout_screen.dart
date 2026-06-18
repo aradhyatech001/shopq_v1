@@ -6,6 +6,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import '../CustomWidgets/motion.dart';
 import '../utils/api_helper.dart';
 import 'package:lottie/lottie.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -987,7 +988,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         ],
                       ),
 
-                      InkWell(
+                      PressableScale(
                         onTap: () {
                           if (location_id.isEmpty) {
                             ScaffoldMessenger.of(context).showSnackBar(

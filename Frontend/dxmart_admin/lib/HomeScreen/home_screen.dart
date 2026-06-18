@@ -5,6 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../Auth/login_screen.dart';
 import '../BannerManagment/banner_management_screen.dart';
+import '../Payouts/payout_management_screen.dart';
+import '../Refunds/refund_management_screen.dart';
 import '../CouponCodeManagment/coupanCodeScreen.dart';
 import '../Dashboard/dashboard_screen.dart';
 import '../DeliveryBoys/delivery_boys_screen.dart';
@@ -97,6 +99,16 @@ final List<_MenuItem> _menuItems = [
     icon: Icons.inventory_2_rounded,
     label: 'Stock',
     screen: const StockManagementScreen(),
+  ),
+  _MenuItem(
+    icon: Icons.assignment_return_rounded,
+    label: 'Refunds',
+    screen: const RefundManagementScreen(),
+  ),
+  _MenuItem(
+    icon: Icons.account_balance_wallet_rounded,
+    label: 'Payouts',
+    screen: const PayoutManagementScreen(),
   ),
   _MenuItem(
     icon: Icons.people_rounded,

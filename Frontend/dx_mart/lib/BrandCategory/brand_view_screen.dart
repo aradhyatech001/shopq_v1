@@ -6,6 +6,7 @@ import '../utils/api_helper.dart';
 
 import '../BottomNav/Screens/cartScreen.dart';
 import '../CustomWidgets/product_card.dart';
+import '../CustomWidgets/skeletons.dart';
 import '../SearchProduct/search_product.dart';
 import '../utils/api_constants.dart';
 import '../utils/colors.dart';
@@ -131,11 +132,7 @@ class _BrandViewScreenState extends State<BrandViewScreen> {
               // ✅ Products Grid OR Empty Message
               Expanded(
                 child: _isLoadingProducts
-                    ? Center(
-                        child: CircularProgressIndicator(
-                          color: AppColors.primaryColor,
-                        ),
-                      )
+                    ? const ProductGridSkeleton(count: 6, crossAxisCount: 2)
                     : filteredProducts.isNotEmpty
                         ? buildSection(filteredProducts)
                         : Center(

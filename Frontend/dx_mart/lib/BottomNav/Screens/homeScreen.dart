@@ -11,6 +11,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../CategoryViewScreen/categoryViewScreen.dart';
 import '../../CustomWidgets/product_card.dart';
+import '../../CustomWidgets/skeletons.dart';
+import '../../CustomWidgets/motion.dart';
 import '../../LocationScreen/locationScreen.dart';
 import '../../SearchProduct/search_product.dart';
 import '../../Shop/shop_detail_screen.dart';
@@ -235,12 +237,11 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> fetchProductsByType(String type) async {
-    final url = Uri.parse(
-      '${ApiConstants.VIEW_PRODUCT_BY_TYPE}?type=$type&page=1&limit=10',
-    );
-
     try {
-      final response = await http.get(url);
+      final response = await ApiHelper.get(
+        '${ApiConstants.VIEW_PRODUCT_BY_TYPE}?type=$type&page=1&limit=10',
+        pincode: true,
+      );
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         if (body['success'] == true && mounted) {
@@ -328,8 +329,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     setState(() => _loadingLayout = true);
     try {
-      final res = await http.get(
-        Uri.parse('${ApiConstants.TAB_LAYOUT}?tab_id=$id'),
+      final res = await ApiHelper.get(
+        '${ApiConstants.TAB_LAYOUT}?tab_id=$id',
+        pincode: true,
       );
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
@@ -395,7 +397,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (type != null && type.isNotEmpty) {
         urlStr += '&type=${Uri.encodeComponent(type)}';
       }
-      final res = await http.get(Uri.parse(urlStr));
+      final res = await ApiHelper.get(urlStr, pincode: true);
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (mounted) {
@@ -553,12 +555,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
         // 3. Loading state
         if (_isLoadingTabContent)
-          SizedBox(
-            height: 300.h,
-            child: Center(
-              child: CircularProgressIndicator(color: AppColors.primaryColor),
-            ),
-          )
+          const HorizontalProductsSkeleton()
         else ...[
           // 4. Subcategory grid (only for category type, not deals)
           if (tab['type'] != 'deals' && _tabSubCategories.isNotEmpty)
@@ -1094,8 +1091,11 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_isLoading) {
       return Scaffold(
         backgroundColor: AppColors.backgroundColor,
-        body: Center(
-          child: CircularProgressIndicator(color: AppColors.primaryColor),
+        body: SafeArea(
+          child: SingleChildScrollView(
+            physics: const NeverScrollableScrollPhysics(),
+            child: const HomeSkeleton(),
+          ),
         ),
       );
     }
@@ -1342,14 +1342,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   builder: (context) {
                     // 1) Admin-configured layout takes priority.
                     if (_loadingLayout && _currentLayout.isEmpty) {
-                      return SizedBox(
-                        height: 300.h,
-                        child: Center(
-                          child: CircularProgressIndicator(
-                            color: AppColors.primaryColor,
-                          ),
-                        ),
-                      );
+                      return const HorizontalProductsSkeleton();
                     }
                     if (_currentLayout.isNotEmpty) return _buildDynamicLayout();
 
@@ -1462,8 +1455,10 @@ class _HomeScreenState extends State<HomeScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(height: 8.h),
-        for (final s in _currentLayout) _buildLayoutSection(s as Map),
-        // SizedBox(height: 24.h),
+        // Sections reveal top-to-bottom with a staggered fade + slide.
+        ...FadeSlideIn.stagger([
+          for (final s in _currentLayout) _buildLayoutSection(s as Map),
+        ]),
       ],
     );
   }

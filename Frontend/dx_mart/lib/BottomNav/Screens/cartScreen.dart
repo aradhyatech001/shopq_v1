@@ -14,6 +14,7 @@ import '../../SearchProduct/search_product.dart';
 import '../../utils/api_constants.dart';
 import '../../utils/colors.dart';
 import '../../utils/api_helper.dart';
+import '../../CustomWidgets/skeletons.dart';
 
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
@@ -595,8 +596,24 @@ class _CartScreenState extends State<CartScreen> {
     return Scaffold(
       backgroundColor: AppColors.backgroundColor,
       body: isLoading
-          ? Center(
-              child: CircularProgressIndicator(color: AppColors.primaryColor),
+          ? SafeArea(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(height: 24.h),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16.w),
+                    child: const Skeleton(child: SkeletonBox(width: 120, height: 20)),
+                  ),
+                  const ListRowsSkeleton(count: 4),
+                  Padding(
+                    padding: EdgeInsets.all(16.w),
+                    child: const Skeleton(
+                      child: SkeletonBox(width: double.infinity, height: 140, radius: 12),
+                    ),
+                  ),
+                ],
+              ),
             )
           : cartItems.isEmpty
           ? Center(
@@ -822,7 +839,12 @@ class _CartScreenState extends State<CartScreen> {
                                               ) ??
                                               1;
                                           final cartItemId = item['id'];
-                                          final imageUlr = item['image_url'];
+                                          // image_url can be null/relative —
+                                          // resolve to a safe absolute URL.
+                                          final imageUlr =
+                                              ApiConstants.imageUrl(
+                                                item['image_url'],
+                                              );
 
                                           final discountPercentage = price > 0
                                               ? ((price - sellingPrice) /
@@ -870,21 +892,29 @@ class _CartScreenState extends State<CartScreen> {
                                                               12.r,
                                                             ),
                                                         child: Center(
-                                                          child: Image.network(
-                                                            imageUlr,
-                                                            width: 30.w,
-                                                            height: 30.h,
-                                                            fit: BoxFit.contain,
-                                                            errorBuilder:
-                                                                (
-                                                                  _,
-                                                                  _,
-                                                                  _,
-                                                                ) => Icon(
+                                                          child: imageUlr.isEmpty
+                                                              ? Icon(
                                                                   Icons.image,
                                                                   size: 24.sp,
+                                                                )
+                                                              : Image.network(
+                                                                  imageUlr,
+                                                                  width: 30.w,
+                                                                  height: 30.h,
+                                                                  fit: BoxFit
+                                                                      .contain,
+                                                                  errorBuilder:
+                                                                      (
+                                                                        _,
+                                                                        _,
+                                                                        _,
+                                                                      ) => Icon(
+                                                                        Icons
+                                                                            .image,
+                                                                        size:
+                                                                            24.sp,
+                                                                      ),
                                                                 ),
-                                                          ),
                                                         ),
                                                       ),
                                                     ),

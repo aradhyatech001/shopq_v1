@@ -31,7 +31,7 @@ class DatabaseSeeder extends Seeder
             // ── Dummy test data ───────────────────────────────────
             UserSeeder::class,
             ProductSeeder::class,        // depends on categories + vendors
-            OrderSeeder::class,          // depends on users + products
+            // OrderSeeder::class,          // depends on users + products
             WishlistSeeder::class,
 
             // ── Fill every remaining table (banner, coupon, settings,

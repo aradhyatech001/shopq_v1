@@ -42,11 +42,15 @@ class OrderStatusService
         ][$to] ?? null;
         if ($stamp) $vo->{$stamp} = now();
 
-        // Accrue earning/commission on delivery.
+        // Stamp the final earning on delivery using the FROZEN settlement
+        // figures (goods_subtotal - coupon_share = net chargeable goods value).
+        // Previously used items_subtotal which ignored the coupon share and
+        // overstated vendor_earning on every coupon order.
         if ($to === 'delivered') {
-            $rate = (float) $vo->commission_rate;
-            $vo->commission_amount = round($vo->items_subtotal * $rate / 100, 2);
-            $vo->vendor_earning = round($vo->items_subtotal - $vo->commission_amount, 2);
+            $rate    = (float) $vo->commission_rate;
+            $netGoods = max(0, (int) $vo->goods_subtotal - (int) $vo->coupon_share);
+            $vo->commission_amount = (int) round($netGoods * $rate / 100);
+            $vo->vendor_earning    = $netGoods - $vo->commission_amount;
         }
         $vo->save();
 

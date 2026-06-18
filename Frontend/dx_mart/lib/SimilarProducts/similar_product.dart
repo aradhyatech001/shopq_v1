@@ -6,6 +6,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../BottomNav/Screens/cartScreen.dart';
 import '../CustomWidgets/product_card.dart';
+import '../CustomWidgets/skeletons.dart';
 import '../SearchProduct/search_product.dart';
 import '../utils/api_constants.dart';
 import '../utils/colors.dart';
@@ -123,7 +124,10 @@ class _SimilarProductState extends State<SimilarProduct> {
               SizedBox(height: 20.h),
 
               // ✅ Products Grid
-              if (products.isNotEmpty) Expanded(child: buildSection(products)),
+              if (_isLoadingProducts)
+                const Expanded(child: ProductGridSkeleton(count: 6, crossAxisCount: 2))
+              else if (products.isNotEmpty)
+                Expanded(child: buildSection(products)),
             ],
           ),
 

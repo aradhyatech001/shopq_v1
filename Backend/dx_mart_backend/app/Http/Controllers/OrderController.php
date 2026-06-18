@@ -5,11 +5,11 @@ use Illuminate\Http\Request;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\OrderAssignment;
+use App\Models\OrderStatusHistory;
 use App\Models\CartItem;
 use App\Models\ProductVariant;
 use App\Models\DeliveryAddress;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 
 class OrderController extends Controller
 {
@@ -17,7 +17,9 @@ class OrderController extends Controller
     {
         // all() merges JSON body and form-encoded input, so this works either way.
         $data           = $request->all();
-        $userId         = (int) ($data['user_id'] ?? 0);
+        // Always derive the acting user from the verified Sanctum token — never
+        // trust a user_id sent in the request body (IDOR prevention).
+        $userId         = $request->user()->id;
         $couponCode     = $data['coupon_code'] ?? null;
         $discountAmount = (float) ($data['discount_amount'] ?? 0);
         $deliveryCharge = (float) ($data['delivery_charge'] ?? 0);
@@ -31,10 +33,8 @@ class OrderController extends Controller
         $userEmail      = $data['user_email'] ?? null;
         $userName       = $data['user_name'] ?? null;
 
-        if (!$userId) return response()->json(['success' => false, 'message' => 'User ID missing']);
-        if (!\App\Models\User::whereKey($userId)->exists()) {
-            return response()->json(['success' => false, 'code' => 'invalid_user', 'message' => 'Session expired. Please log in again.']);
-        }
+        // $userId comes from the token; skip the redundant existence check
+        // (Sanctum already guards the route; a missing user returns 401 before here).
 
         // Validate the delivery address (orders.location_id has an FK to
         // delivery_address). A stale/missing address id would 500 otherwise.
@@ -64,61 +64,112 @@ class OrderController extends Controller
             return response()->json(['success' => false, 'message' => 'Cart is empty']);
         }
 
-        // Items subtotal at MRP. The frontend's `discount_amount` already includes the
-        // MRP→selling savings, so final = mrpTotal - discount + charges == selling + charges
-        // (matching the total the user saw at checkout). Using the selling total here
-        // would subtract the savings a second time and under-charge the order.
-        $cartTotal = 0;   // MRP subtotal → stored as total_amount
-        $items     = [];
+        // ── Pricing inputs (computed once, then frozen) ────────────
+        // mrp subtotal  → total_amount (struck-through reference)
+        // selling subtotal per vendor → settlement weights
+        // The frontend's `discount_amount` bundles MRP→selling savings AND any
+        // coupon. Coupon-only ₹ = discount_amount − MRP savings; that is the
+        // amount actually allocated across vendors as the coupon pool.
+        $cartTotal       = 0;   // MRP subtotal
+        $sellingSubtotal = 0;   // selling subtotal (all vendors)
+        $vendorTotals    = [];  // vendor_id (0 = platform) => selling subtotal
+        $items           = [];
         foreach ($cartItems as $row) {
-            $cartTotal += (float) $row->mrp * (int) $row->quantity;
-            $items[] = (array) $row;
+            $r    = (array) $row;
+            $qty  = (int) $r['quantity'];
+            $line = (float) $r['price'] * $qty;
+            $cartTotal       += (float) $r['mrp'] * $qty;
+            $sellingSubtotal += $line;
+            $vid = $r['vendor_id'] ?: 0;
+            $vendorTotals[$vid] = ($vendorTotals[$vid] ?? 0) + $line;
+            $items[] = $r;
         }
 
-        $finalAmount = ($cartTotal - $discountAmount) + $deliveryCharge + $handlingCharge;
+        $mrpSavings     = max(0, $cartTotal - $sellingSubtotal);
+        $couponDiscount = max(0, $discountAmount - $mrpSavings); // coupon-only ₹
+
+        // ── H4: Validate coupon min_amount before applying ─────────
+        if ($couponCode) {
+            $coupon = \App\Models\Coupon::where('code_name', $couponCode)->where('status', 1)->first();
+            if (!$coupon) {
+                return response()->json(['success' => false, 'message' => 'Invalid or expired coupon.']);
+            }
+            $minAmt = (float) ($coupon->min_amount ?? 0);
+            if ($minAmt > 0 && $sellingSubtotal < $minAmt) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Minimum order value of ₹' . number_format($minAmt, 0) . ' required for this coupon.',
+                ]);
+            }
+        }
+
+        // ── Freeze the settlement (largest-remainder split) ────────
+        $settlement  = \App\Services\SettlementService::freeze(
+            $vendorTotals, $couponDiscount, $deliveryCharge, $handlingCharge
+        );
+        $finalAmount = $settlement['grand_total']; // whole-rupee grand total
+
+        // ── Frozen coupon snapshot (immune to later coupon changes) ─
+        $couponTitle = null; $couponType = null; $couponValue = 0;
+        if ($couponCode) {
+            $c = \App\Models\Coupon::where('code_name', $couponCode)->first();
+            if ($c) { $couponTitle = $c->title; $couponType = 'percent'; $couponValue = (float) $c->discount; }
+        }
 
         // Insert order
         $order = Order::create([
             'user_id'         => $userId,
             'total_amount'    => $cartTotal,
             'coupon_code'     => $couponCode,
+            'coupon_title'    => $couponTitle,
+            'coupon_type'     => $couponType,
+            'coupon_value'    => $couponValue,
+            'coupon_discount' => $settlement['coupon_discount'],
             'discount_amount' => $discountAmount,
             'delivery_charge' => $deliveryCharge,
             'handling_charge' => $handlingCharge,
             'final_amount'    => $finalAmount,
+            'settlement_frozen' => true,
             'status'          => 'pending',
             'payment_method'  => $paymentMethod,
+            'payment_status'  => 'pending',
             'order_datetime'  => $dateTimeNow,
+            'ordered_at'      => now(),
             'delivery_date'   => $deliveryDate,
             'delivery_time'   => $deliverTime,
             'location_id'     => $locationId,
             'gift'            => $gift,
         ]);
 
-        // ── Multi-vendor: group items by vendor and create one sub-order each.
-        // Platform commission default (vendor.commission_rate overrides it).
+        // ── Multi-vendor: create one sub-order each, carrying its frozen
+        // settlement shares. Platform (vid 0) items have no sub-order; their
+        // value is reflected in the grand total but collected by the platform.
         $defaultCommission = (float) (\App\Models\AppSetting::where('key', 'platform_commission_rate')->value('value') ?? 0);
 
-        // Pre-create a vendor_order per distinct vendor in the cart.
-        $vendorTotals = [];   // vendor_id => subtotal (selling)
-        foreach ($items as $item) {
-            $vid = $item['vendor_id'] ?: 0;
-            if ($vid == 0) continue;
-            $vendorTotals[$vid] = ($vendorTotals[$vid] ?? 0) + (float) $item['price'] * (int) $item['quantity'];
-        }
         $vendorOrderIds = []; // vendor_id => vendor_order id
         foreach ($vendorTotals as $vid => $subtotal) {
-            $rate = \App\Models\Vendor::where('id', $vid)->value('commission_rate');
-            $rate = $rate !== null ? (float) $rate : $defaultCommission;
-            $commission = round($subtotal * $rate / 100, 2);
+            if ($vid == 0) continue;
+            $s = $settlement['vendors'][$vid];
+            // Commission is taken on net goods value only (delivery/handling are
+            // platform's money even though the rider collects them).
+            $rate       = \App\Models\Vendor::where('id', $vid)->value('commission_rate');
+            $rate       = $rate !== null ? (float) $rate : $defaultCommission;
+            $netGoods   = $s['goods_subtotal'] - $s['coupon_share'];
+            $commission = (int) round($netGoods * $rate / 100);
             $vendorOrderIds[$vid] = \App\Models\VendorOrder::create([
                 'parent_order_id'   => $order->id,
                 'vendor_id'         => $vid,
                 'status'            => 'pending',
                 'items_subtotal'    => $subtotal,
+                'goods_subtotal'    => $s['goods_subtotal'],
+                'coupon_share'      => $s['coupon_share'],
+                'delivery_share'    => $s['delivery_share'],
+                'handling_share'    => $s['handling_share'],
+                'collect_amount'    => $s['collect_amount'],
+                'payment_status'    => 'pending',
                 'commission_rate'   => $rate,
                 'commission_amount' => $commission,
-                'vendor_earning'    => round($subtotal - $commission, 2),
+                'vendor_earning'    => $netGoods - $commission,
             ])->id;
         }
 
@@ -153,8 +204,11 @@ class OrderController extends Controller
         // Clear cart
         CartItem::where('user_id', $userId)->delete();
 
-        // Send emails async
-        $this->sendOrderEmails($order, $items, $userName, $userEmail, $discountAmount, $deliveryCharge, $handlingCharge, $finalAmount, $cartTotal);
+        // Dispatch email in a queue job so SMTP latency doesn't block checkout.
+        \App\Jobs\SendOrderConfirmationEmail::dispatch(
+            $order->id, $items, $userName, $userEmail,
+            $discountAmount, $deliveryCharge, $handlingCharge, $finalAmount, $cartTotal
+        );
 
         return response()->json([
             'success'      => true,
@@ -164,143 +218,38 @@ class OrderController extends Controller
         ]);
     }
 
-    private function sendOrderEmails($order, $items, $userName, $userEmail, $discount, $deliveryCharge, $handlingCharge, $finalAmount, $cartTotal)
-    {
-        $companyEmail = config('mail.from.address');
-        $subject      = "Order Confirmation - #{$order->id}";
-
-        $itemsHtml = '';
-        foreach ($items as $item) {
-            $itemsHtml .= "
-                    <div style='padding:10px;border-bottom:1px solid #eee;'>
-                        <p style='margin:0;'><strong>" . htmlspecialchars($item['product_name']) . "</strong></p>
-                        <p style='margin:4px 0 0;'>Quantity: {$item['quantity']} × ₹" . number_format((float)$item['price'], 2) . "</p>
-                    </div>";
-        }
-
-        $discountHtml = $discount > 0
-            ? "<p><strong>Discount:</strong> -₹" . number_format($discount, 2) . "</p>"
-            : '';
-
-        $userBody = "
-        <!DOCTYPE html>
-        <html lang='en'>
-        <head>
-            <meta charset='UTF-8'>
-            <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-            <title>Order Confirmation</title>
-        </head>
-        <body style='font-family:Arial,sans-serif;line-height:1.6;color:#333;margin:0;padding:0;background-color:#f9f9f9;'>
-            <div style='max-width:600px;margin:0 auto;background-color:#ffffff;padding:20px;border:1px solid #ddd;border-radius:5px;'>
-                <div style='text-align:center;padding-bottom:20px;border-bottom:1px solid #eee;'>
-                    <h1 style='color:#2c3e50;margin:0;'>Order Confirmation</h1>
-                </div>
-
-                <p>Dear " . htmlspecialchars((string)$userName) . ",</p>
-                <p>Thank you for your order! We are pleased to confirm that we have received your order and it is now being processed.</p>
-
-                <div style='margin:20px 0;padding:15px;background-color:#f8f9fa;border-radius:5px;'>
-                    <h2>Order Details</h2>
-                    <p><strong>Order ID:</strong> <span style='background-color:#f1c40f;padding:2px 5px;border-radius:3px;'>#" . $order->id . "</span></p>
-                    <p><strong>Order Date:</strong> " . $order->order_datetime . "</p>
-                    <p><strong>Payment Method:</strong> " . $order->payment_method . "</p>
-                    <p><strong>Delivery Date:</strong> " . $order->delivery_date . " at " . $order->delivery_time . "</p>
-                </div>
-
-                <div style='margin:20px 0;padding:15px;background-color:#f8f9fa;border-radius:5px;'>
-                    <h2>Ordered Items</h2>
-                    $itemsHtml
-                </div>
-
-                <div style='margin:20px 0;padding:15px;background-color:#f8f9fa;border-radius:5px;'>
-                    <h2>Order Summary</h2>
-                    <p><strong>Subtotal:</strong> ₹" . number_format($cartTotal, 2) . "</p>
-                    $discountHtml
-                    <p><strong>Delivery Charge:</strong> ₹" . number_format($deliveryCharge, 2) . "</p>
-                    <p><strong>Handling Charge:</strong> ₹" . number_format($handlingCharge, 2) . "</p>
-                    <div style='font-size:18px;font-weight:bold;color:#27ae60;margin-top:10px;padding-top:10px;border-top:1px solid #ddd;'>
-                        <strong>Total Amount: ₹" . number_format($finalAmount, 2) . "</strong>
-                    </div>
-                </div>
-
-                <p>We will notify you once your order has been shipped. If you have any questions, please contact our customer service team.</p>
-
-                <div style='margin-top:30px;padding-top:20px;border-top:1px solid #eee;text-align:center;color:#7f8c8d;font-size:14px;'>
-                    <p>Thank you for shopping with us!</p>
-                    <p>© " . date('Y') . " DxMart. All rights reserved.</p>
-                </div>
-            </div>
-        </body>
-        </html>";
-
-        $companyBody = "
-        <!DOCTYPE html>
-        <html lang='en'>
-        <head><meta charset='UTF-8'><title>New Order</title></head>
-        <body style='font-family:Arial,sans-serif;line-height:1.6;color:#333;margin:0;padding:0;'>
-            <div style='max-width:600px;margin:0 auto;padding:20px;'>
-                <div style='text-align:center;padding-bottom:20px;border-bottom:1px solid #eee;'>
-                    <h1>New Order Received</h1>
-                </div>
-                <div style='margin:20px 0;padding:15px;background-color:#f8f9fa;border-radius:5px;'>
-                    <h2>Order Details</h2>
-                    <p><strong>Order ID:</strong> <span style='background-color:#f1c40f;padding:2px 5px;border-radius:3px;'>#" . $order->id . "</span></p>
-                    <p><strong>Customer:</strong> " . htmlspecialchars((string)$userName) . " (" . htmlspecialchars((string)$userEmail) . ")</p>
-                    <p><strong>Order Date:</strong> " . $order->order_datetime . "</p>
-                    <p><strong>Payment Method:</strong> " . $order->payment_method . "</p>
-                    <p><strong>Delivery Date:</strong> " . $order->delivery_date . " at " . $order->delivery_time . "</p>
-                    <p style='color:#e74c3c;font-weight:bold;'><strong>Total Amount:</strong> ₹" . number_format($finalAmount, 2) . "</p>
-                </div>
-                <div style='margin:20px 0;'>
-                    <h2>Ordered Items</h2>
-                    $itemsHtml
-                </div>
-                <p>This order requires your attention. Please process it according to the delivery schedule.</p>
-            </div>
-        </body>
-        </html>";
-
-        try {
-            if ($userEmail) {
-                Mail::html($userBody, function ($msg) use ($userEmail, $subject) {
-                    $msg->to($userEmail)->subject($subject);
-                });
-            }
-            Mail::html($companyBody, function ($msg) use ($companyEmail, $order) {
-                $msg->to($companyEmail)->subject("New Order #{$order->id}");
-            });
-        } catch (\Exception $e) {
-            // Email failure should not block order
-        }
-    }
-
+    // N+1 fix: batch-load all items for all orders in two queries instead of N+1.
     private function fetchOrdersWithItems($query)
     {
         $orders = $query->get();
-        return $orders->map(function ($order) {
+        if ($orders->isEmpty()) return collect();
+
+        $orderIds = $orders->pluck('id')->toArray();
+
+        // Single query for all items across all orders in this page/set.
+        $rawItems = DB::select("
+            SELECT oi.order_id, oi.id AS order_item_id, oi.product_id, p.name AS product_name,
+                   oi.variant_id, pv.name AS variant_name, pv.price, pv.selling_price, pv.stock,
+                   oi.quantity, oi.image_url,
+                   (SELECT pi.image_url FROM product_images pi
+                      WHERE pi.product_id = oi.product_id ORDER BY pi.id ASC LIMIT 1) AS product_image
+            FROM order_items oi
+            JOIN products p ON oi.product_id = p.id
+            LEFT JOIN product_variants pv ON oi.variant_id = pv.id
+            WHERE oi.order_id IN (" . implode(',', array_fill(0, count($orderIds), '?')) . ")
+        ", $orderIds);
+
+        // Group items by order_id.
+        $grouped = [];
+        foreach ($rawItems as $it) {
+            $raw = !empty($it->image_url) ? $it->image_url : ($it->product_image ?? '');
+            $it->image_url = $this->imageUrl($raw);
+            $it->image     = $it->image_url;
+            $grouped[$it->order_id][] = $it;
+        }
+
+        return $orders->map(function ($order) use ($grouped) {
             $address = $order->address;
-            $items   = DB::select("
-                SELECT oi.id AS order_item_id, oi.product_id, p.name AS product_name,
-                       oi.variant_id, pv.name AS variant_name, pv.price, pv.selling_price, pv.stock,
-                       oi.quantity, oi.image_url,
-                       (SELECT pi.image_url FROM product_images pi
-                          WHERE pi.product_id = oi.product_id ORDER BY pi.id ASC LIMIT 1) AS product_image
-                FROM order_items oi
-                JOIN products p ON oi.product_id = p.id
-                LEFT JOIN product_variants pv ON oi.variant_id = pv.id
-                WHERE oi.order_id = ?
-            ", [$order->id]);
-
-            // Resolve each item's image to an absolute URL. The stored
-            // order_items.image_url is a relative path (or empty), so fall back
-            // to the product's first image and run it through imageUrl().
-            $items = array_map(function ($it) {
-                $raw = !empty($it->image_url) ? $it->image_url : ($it->product_image ?? '');
-                $it->image_url = $this->imageUrl($raw);
-                $it->image     = $it->image_url; // alias the app also reads
-                return $it;
-            }, $items);
-
             return [
                 'order' => array_merge($order->toArray(), [
                     'name'         => $address->name ?? null,
@@ -309,15 +258,14 @@ class OrderController extends Controller
                     'pin_code'     => $address->pin_code ?? null,
                     'landmark'     => $address->landmark ?? null,
                 ]),
-                'items' => $items,
+                'items' => $grouped[$order->id] ?? [],
             ];
         });
     }
 
     public function getByUser(Request $request)
     {
-        $userId = (int) $request->input('user_id', 0);
-        if (!$userId) return response()->json(['success' => false, 'message' => 'User ID missing']);
+        $userId = $request->user()->id;
 
         $query  = Order::with('address')->where('user_id', $userId)->orderByDesc('id');
         $orders = $this->fetchOrdersWithItems($query);
@@ -350,19 +298,19 @@ class OrderController extends Controller
         $query  = Order::with('address')->orderByDesc('id')->limit(200);
         $orders = $this->fetchOrdersWithItems($query);
 
-        // order_datetime is stored as "dd-MM-yyyy hh:mm a" string — use STR_TO_DATE to parse it
+        // Use the indexed ordered_at DATETIME column (added in migration 000003).
+        // Falls back to 0 gracefully for old rows that haven't been backfilled.
         $todayRow = DB::select("
             SELECT COALESCE(SUM(final_amount), 0) AS total
             FROM orders
-            WHERE DATE(STR_TO_DATE(order_datetime, '%d-%m-%Y %h:%i %p')) = CURDATE()
+            WHERE DATE(ordered_at) = CURDATE()
         ");
         $todaySales = (float) ($todayRow[0]->total ?? 0);
 
         $weeklySales = DB::select("
-            SELECT DATE(STR_TO_DATE(order_datetime, '%d-%m-%Y %h:%i %p')) as sale_date,
-                   SUM(final_amount) as total_sales
+            SELECT DATE(ordered_at) as sale_date, SUM(final_amount) as total_sales
             FROM orders
-            WHERE DATE(STR_TO_DATE(order_datetime, '%d-%m-%Y %h:%i %p')) >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+            WHERE ordered_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
             GROUP BY sale_date
             ORDER BY sale_date ASC
         ");
@@ -373,6 +321,104 @@ class OrderController extends Controller
             'dashboard' => [
                 'today_sales'  => $todaySales,
                 'weekly_sales' => array_map(fn($r) => ['date' => $r->sale_date, 'sales' => (float) $r->total_sales], $weeklySales),
+            ],
+        ]);
+    }
+
+    // ── POST /orders/{id}/cancel (auth:sanctum) ───────
+    public function cancel(Request $request, int $id)
+    {
+        $order = Order::find($id);
+        if (!$order) return response()->json(['success' => false, 'message' => 'Order not found'], 404);
+        if ($order->user_id !== $request->user()->id) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
+        $status = strtolower($order->status);
+        if (in_array($status, ['delivered', 'cancelled'], true)) {
+            return response()->json(['success' => false, 'message' => "Cannot cancel an order that is '$status'"]);
+        }
+        if (!in_array($status, ['pending', 'confirmed'], true)) {
+            return response()->json(['success' => false, 'message' => 'Order can only be cancelled before it is packed']);
+        }
+
+        DB::transaction(function () use ($order, $request) {
+            // Restore stock for every item.
+            $items = OrderItem::where('order_id', $order->id)->get();
+            foreach ($items as $item) {
+                if ($item->variant_id) {
+                    DB::statement("UPDATE product_variants SET stock = stock + ? WHERE id = ?",
+                        [$item->quantity, $item->variant_id]);
+                }
+            }
+
+            // Cancel all non-terminal vendor sub-orders.
+            \App\Models\VendorOrder::where('parent_order_id', $order->id)
+                ->whereNotIn('status', ['delivered', 'cancelled'])
+                ->update(['status' => 'cancelled', 'cancelled_at' => now()]);
+
+            $order->update(['status' => 'cancelled', 'payment_status' => 'refund_pending']);
+
+            \App\Models\OrderStatusHistory::create([
+                'parent_order_id' => $order->id,
+                'actor_type'      => 'customer',
+                'actor_id'        => $request->user()->id,
+                'from_status'     => $order->getOriginal('status'),
+                'to_status'       => 'cancelled',
+                'note'            => 'Cancelled by customer',
+                'created_at'      => now(),
+            ]);
+        });
+
+        return response()->json(['success' => true, 'message' => 'Order cancelled successfully']);
+    }
+
+    // ── GET /admin/orders/{id}/settlement (auth:admin) ─
+    public function getSettlement(int $id)
+    {
+        $order = Order::with(['vendorOrders.vendor:id,name,shop_name', 'vendorOrders.items.product:id,name'])->find($id);
+        if (!$order) return response()->json(['success' => false, 'message' => 'Order not found'], 404);
+
+        $vendorBreakdown = $order->vendorOrders->map(function ($vo) {
+            return [
+                'vendor_order_id'   => $vo->id,
+                'vendor_id'         => $vo->vendor_id,
+                'vendor_name'       => $vo->vendor?->shop_name ?: $vo->vendor?->name,
+                'status'            => $vo->status,
+                'items_subtotal'    => (float) $vo->items_subtotal,
+                'goods_subtotal'    => (float) $vo->goods_subtotal,
+                'coupon_share'      => (float) $vo->coupon_share,
+                'delivery_share'    => (float) $vo->delivery_share,
+                'handling_share'    => (float) $vo->handling_share,
+                'collect_amount'    => (float) $vo->collect_amount,
+                'commission_rate'   => (float) $vo->commission_rate,
+                'commission_amount' => (float) $vo->commission_amount,
+                'vendor_earning'    => (float) $vo->vendor_earning,
+                'payment_status'    => $vo->payment_status,
+                'cod_collected'     => (float) ($vo->cod_collected_amount ?? 0),
+                'payout_id'         => $vo->payout_id,
+            ];
+        });
+
+        return response()->json([
+            'success'   => true,
+            'order_id'  => $order->id,
+            'summary'   => [
+                'total_amount'    => (float) $order->total_amount,
+                'discount_amount' => (float) $order->discount_amount,
+                'coupon_code'     => $order->coupon_code,
+                'coupon_discount' => (float) $order->coupon_discount,
+                'delivery_charge' => (float) $order->delivery_charge,
+                'handling_charge' => (float) $order->handling_charge,
+                'final_amount'    => (float) $order->final_amount,
+                'payment_method'  => $order->payment_method,
+                'payment_status'  => $order->payment_status,
+            ],
+            'vendors'   => $vendorBreakdown,
+            'platform'  => [
+                'delivery_charge'  => (float) $order->delivery_charge,
+                'handling_charge'  => (float) $order->handling_charge,
+                'total_commission' => $vendorBreakdown->sum('commission_amount'),
             ],
         ]);
     }
@@ -399,7 +445,43 @@ class OrderController extends Controller
         }
 
         $order->update(['status' => $newStatus]);
+
+        OrderStatusHistory::create([
+            'parent_order_id' => $order->id,
+            'vendor_order_id' => null,
+            'actor_type'      => 'admin',
+            'actor_id'        => null,
+            'from_status'     => $oldStatus,
+            'to_status'       => $newStatus,
+            'note'            => 'Status updated by admin',
+            'created_at'      => now(),
+        ]);
+
         return response()->json(['success' => true, 'message' => 'Order status updated successfully with stock adjustment']);
+    }
+
+    // ── GET /orders/{id}/history (auth:sanctum) ────────
+    // Returns the status-change audit log for the order.
+    public function getHistory(Request $request, int $id)
+    {
+        $order = Order::find($id);
+        if (!$order) return response()->json(['success' => false, 'message' => 'Order not found'], 404);
+        if ($order->user_id !== $request->user()->id) {
+            return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
+        }
+
+        $history = OrderStatusHistory::where('parent_order_id', $id)
+            ->orderBy('created_at')
+            ->get()
+            ->map(fn($h) => [
+                'from_status' => $h->from_status,
+                'to_status'   => $h->to_status,
+                'actor_type'  => $h->actor_type,
+                'note'        => $h->note,
+                'created_at'  => $h->created_at,
+            ]);
+
+        return response()->json(['success' => true, 'history' => $history]);
     }
 
     public function getSalesReport()
@@ -434,13 +516,21 @@ class OrderController extends Controller
 
     public function assign(Request $request)
     {
-        $orderId       = $request->input('order_id');
-        $deliveryBoyId = $request->input('delivery_boy_id');
+        $orderId       = (int) $request->input('order_id');
+        $deliveryBoyId = (int) $request->input('delivery_boy_id');
         $dateTime      = $request->input('date_time');
         if (!$orderId || !$deliveryBoyId || !$dateTime) {
             return response()->json(['success' => false, 'message' => 'All fields are required']);
         }
+        // Legacy assignment record (used by admin panel order list).
         OrderAssignment::create(['order_id' => $orderId, 'delivery_boy_id' => $deliveryBoyId, 'date_time' => $dateTime]);
+
+        // Also stamp every vendor_order in this parent order so the delivery app
+        // (which reads vendor_orders.delivery_boy_id) shows the assignment.
+        \App\Models\VendorOrder::where('parent_order_id', $orderId)
+            ->whereNotIn('status', ['delivered', 'cancelled'])
+            ->update(['delivery_boy_id' => $deliveryBoyId]);
+
         return response()->json(['success' => true, 'message' => 'Order assignment successful']);
     }
 

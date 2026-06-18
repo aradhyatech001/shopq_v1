@@ -23,10 +23,29 @@ class _DeliveryBoysScreenState extends State<DeliveryBoysScreen> {
   List _riders = [];
   bool _loading = true;
 
+  // Right-panel Add/Edit form (split layout).
+  final _nameCtrl = TextEditingController();
+  final _mobileCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _pinCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
+  Map? _editing; // null = Add mode
+  bool _saving = false;
+
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _mobileCtrl.dispose();
+    _emailCtrl.dispose();
+    _pinCtrl.dispose();
+    _passCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -74,86 +93,108 @@ class _DeliveryBoysScreenState extends State<DeliveryBoysScreen> {
     } catch (_) {}
   }
 
-  // ── Add / edit form (side sheet) ───────────────────────────
-  void _openForm({Map? existing}) {
-    final isEdit = existing != null;
-    final name = TextEditingController(text: existing?['name'] ?? '');
-    final mobile = TextEditingController(text: existing?['mobile'] ?? '');
-    final email = TextEditingController(text: existing?['email'] ?? '');
-    final pin = TextEditingController(text: existing?['pin_code'] ?? '');
-    final pass = TextEditingController();
-    bool saving = false;
+  // ── Add / edit form (right split panel) ────────────────────
+  // Loads a rider into the right panel for editing (no side sheet).
+  void _startEdit(Map r) {
+    setState(() {
+      _editing = r;
+      _nameCtrl.text = r['name']?.toString() ?? '';
+      _mobileCtrl.text = r['mobile']?.toString() ?? '';
+      _emailCtrl.text = r['email']?.toString() ?? '';
+      _pinCtrl.text = r['pin_code']?.toString() ?? '';
+      _passCtrl.clear();
+    });
+  }
 
-    showAdminSideSheet(
-      context,
-      child: StatefulBuilder(
-        builder: (ctx, setS) => AdminSideSheet(
-          title: isEdit ? 'Edit delivery boy' : 'Add delivery boy',
-          subtitle: 'Platform fleet rider',
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: GoogleFonts.jost())),
-            ElevatedButton(
-              onPressed: saving
-                  ? null
-                  : () async {
-                      if (name.text.trim().isEmpty || mobile.text.trim().isEmpty ||
-                          (!isEdit && pass.text.isEmpty)) {
-                        _snack('Name, mobile and password are required', AppColors.warningColor);
-                        return;
-                      }
-                      setS(() => saving = true);
-                      try {
-                        final body = <String, String>{
-                          if (isEdit) 'id': existing['id'].toString(),
-                          'name': name.text.trim(),
-                          'mobile': mobile.text.trim(),
-                          'email': email.text.trim(),
-                          'pin_code': pin.text.trim(),
-                          if (pass.text.isNotEmpty) 'password': pass.text,
-                        };
-                        final url = isEdit
-                            ? ApiConstants.ADMIN_DELIVERY_BOYS_EDIT
-                            : ApiConstants.ADMIN_DELIVERY_BOYS_ADD;
-                        final res = await AdminApi.post(Uri.parse(url), body: body);
-                        final data = jsonDecode(res.body);
-                        if (data['success'] == true) {
-                          if (ctx.mounted) Navigator.pop(ctx);
-                          _snack(isEdit ? 'Updated' : 'Added', AppColors.successColor);
-                          _load();
-                        } else {
-                          _snack(data['message'] ?? 'Failed', AppColors.errorColor);
-                        }
-                      } catch (e) {
-                        _snack('Error: $e', AppColors.errorColor);
-                      } finally {
-                        setS(() => saving = false);
-                      }
-                    },
-              child: saving
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                  : Text('Save', style: GoogleFonts.jost(color: Colors.white)),
-            ),
-          ],
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+  void _resetForm() {
+    setState(() {
+      _editing = null;
+      _nameCtrl.clear();
+      _mobileCtrl.clear();
+      _emailCtrl.clear();
+      _pinCtrl.clear();
+      _passCtrl.clear();
+    });
+  }
+
+  // Add (no editing) or update (editing) — one right panel does both.
+  Future<void> _save() async {
+    final isEdit = _editing != null;
+    if (_nameCtrl.text.trim().isEmpty || _mobileCtrl.text.trim().isEmpty ||
+        (!isEdit && _passCtrl.text.isEmpty)) {
+      _snack('Name, mobile and password are required', AppColors.warningColor);
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      final body = <String, String>{
+        if (isEdit) 'id': _editing!['id'].toString(),
+        'name': _nameCtrl.text.trim(),
+        'mobile': _mobileCtrl.text.trim(),
+        'email': _emailCtrl.text.trim(),
+        'pin_code': _pinCtrl.text.trim(),
+        if (_passCtrl.text.isNotEmpty) 'password': _passCtrl.text,
+      };
+      final url = isEdit
+          ? ApiConstants.ADMIN_DELIVERY_BOYS_EDIT
+          : ApiConstants.ADMIN_DELIVERY_BOYS_ADD;
+      final res = await AdminApi.post(Uri.parse(url), body: body);
+      final data = jsonDecode(res.body);
+      if (data['success'] == true) {
+        _snack(isEdit ? 'Updated' : 'Added', AppColors.successColor);
+        _resetForm();
+        _load();
+      } else {
+        _snack(data['message'] ?? 'Failed', AppColors.errorColor);
+      }
+    } catch (e) {
+      _snack('Error: $e', AppColors.errorColor);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Widget _buildForm() {
+    final editing = _editing != null;
+    return SectionCard(
+      title: editing ? 'Edit delivery boy' : 'Add delivery boy',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const FormLabel('Name', required: true),
+          _field(_nameCtrl, 'Full name'),
+          SizedBox(height: 14.h),
+          const FormLabel('Mobile', required: true),
+          _field(_mobileCtrl, '10-digit number', type: TextInputType.phone, maxLen: 10, digits: true),
+          SizedBox(height: 14.h),
+          const FormLabel('Email'),
+          _field(_emailCtrl, 'email@example.com', type: TextInputType.emailAddress),
+          SizedBox(height: 14.h),
+          const FormLabel('Pincode'),
+          _field(_pinCtrl, '6-digit pincode', type: TextInputType.number, maxLen: 6, digits: true),
+          SizedBox(height: 14.h),
+          FormLabel(editing ? 'New password (optional)' : 'Password', required: !editing),
+          _field(_passCtrl, editing ? 'Leave blank to keep' : 'Set a password', obscure: true),
+          SizedBox(height: 20.h),
+          Row(
             children: [
-              const FormLabel('Name', required: true),
-              _field(name, 'Full name'),
-              SizedBox(height: 14.h),
-              const FormLabel('Mobile', required: true),
-              _field(mobile, '10-digit number', type: TextInputType.phone, maxLen: 10, digits: true),
-              SizedBox(height: 14.h),
-              const FormLabel('Email'),
-              _field(email, 'email@example.com', type: TextInputType.emailAddress),
-              SizedBox(height: 14.h),
-              const FormLabel('Pincode'),
-              _field(pin, '6-digit pincode', type: TextInputType.number, maxLen: 6, digits: true),
-              SizedBox(height: 14.h),
-              FormLabel(isEdit ? 'New password (optional)' : 'Password', required: !isEdit),
-              _field(pass, isEdit ? 'Leave blank to keep' : 'Set a password', obscure: true),
+              Expanded(
+                child: _saving
+                    ? const Center(child: CircularProgressIndicator())
+                    : ElevatedButton(
+                        onPressed: _save,
+                        child: Text(editing ? 'Save' : 'Add',
+                            style: GoogleFonts.jost(fontWeight: FontWeight.w600)),
+                      ),
+              ),
+              SizedBox(width: 10.w),
+              OutlinedButton(
+                onPressed: _resetForm,
+                child: Text(editing ? 'Cancel' : 'Reset', style: GoogleFonts.jost()),
+              ),
             ],
           ),
-        ),
+        ],
       ),
     );
   }
@@ -188,36 +229,48 @@ class _DeliveryBoysScreenState extends State<DeliveryBoysScreen> {
       subtitle: '${_riders.length} riders',
       actions: [
         IconButton(onPressed: _load, icon: Icon(Icons.refresh_rounded, color: AppColors.secondaryTextColor, size: 20.sp)),
-        SizedBox(width: 6.w),
-        FilledButton.icon(
-          onPressed: () => _openForm(),
-          icon: const Icon(Icons.add, size: 18),
-          label: Text('Add', style: GoogleFonts.jost(fontWeight: FontWeight.w600)),
-          style: FilledButton.styleFrom(backgroundColor: AppColors.primaryColor),
-        ),
       ],
       child: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _riders.isEmpty
-              ? const EmptyState(icon: Icons.delivery_dining_outlined, message: 'No delivery boys yet', hint: 'Add one to the platform fleet')
-              : ListView.separated(
-                  padding: EdgeInsets.all(16.w),
-                  itemCount: _riders.length,
-                  separatorBuilder: (_, __) => SizedBox(height: 10.h),
-                  itemBuilder: (_, i) => _card(_riders[i]),
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Left: rider list ──
+                Expanded(
+                  flex: 3,
+                  child: _riders.isEmpty
+                      ? const EmptyState(icon: Icons.delivery_dining_outlined, message: 'No delivery boys yet', hint: 'Add one using the form')
+                      : ListView.separated(
+                          padding: EdgeInsets.all(16.w),
+                          itemCount: _riders.length,
+                          separatorBuilder: (_, __) => SizedBox(height: 10.h),
+                          itemBuilder: (_, i) => _card(_riders[i]),
+                        ),
                 ),
+                const VerticalDivider(width: 1),
+                // ── Right: add/edit form ──
+                SizedBox(
+                  width: 320.w,
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.all(20.w),
+                    child: _buildForm(),
+                  ),
+                ),
+              ],
+            ),
     );
   }
 
   Widget _card(Map r) {
     final active = (r['status'] ?? 'active').toString() == 'active';
     final platform = r['vendor_id'] == null;
+    final selected = _editing != null && _editing!['id'] == r['id'];
     return Container(
       padding: EdgeInsets.all(14.w),
       decoration: BoxDecoration(
-        color: AppColors.surfaceColor,
+        color: selected ? AppColors.primaryLight : AppColors.surfaceColor,
         borderRadius: BorderRadius.circular(12.r),
-        border: Border.all(color: AppColors.borderColor),
+        border: Border.all(color: selected ? AppColors.primaryColor : AppColors.borderColor),
         boxShadow: AppColors.cardShadow,
       ),
       child: Row(
@@ -256,7 +309,7 @@ class _DeliveryBoysScreenState extends State<DeliveryBoysScreen> {
             ),
             IconButton(
               icon: Icon(Icons.edit_outlined, color: AppColors.primaryColor, size: 18.sp),
-              onPressed: () => _openForm(existing: r),
+              onPressed: () => _startEdit(r),
             ),
             IconButton(
               icon: Icon(Icons.delete_outline, color: AppColors.errorColor, size: 18.sp),

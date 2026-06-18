@@ -458,6 +458,9 @@ class AdminSideSheet extends StatelessWidget {
   final String? subtitle;
   final Widget child;
   final List<Widget>? actions;
+  // When set, the close (✕) calls this instead of popping a route — lets the
+  // same widget be embedded inline as a split panel, not just as an overlay.
+  final VoidCallback? onClose;
 
   const AdminSideSheet({
     super.key,
@@ -465,6 +468,7 @@ class AdminSideSheet extends StatelessWidget {
     this.subtitle,
     required this.child,
     this.actions,
+    this.onClose,
   });
 
   @override
@@ -503,7 +507,7 @@ class AdminSideSheet extends StatelessWidget {
               IconButton(
                 icon: Icon(Icons.close_rounded, size: 20.sp),
                 color: AppColors.secondaryTextColor,
-                onPressed: () => Navigator.of(context).maybePop(),
+                onPressed: onClose ?? () => Navigator.of(context).maybePop(),
               ),
             ],
           ),

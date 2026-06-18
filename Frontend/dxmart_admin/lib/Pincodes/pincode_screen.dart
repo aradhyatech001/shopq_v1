@@ -20,6 +20,15 @@ class _PincodeScreenState extends State<PincodeScreen> {
   String _search = '';
   final _searchCtrl = TextEditingController();
 
+  // Right-panel Add/Edit form (split layout).
+  final _codeCtrl = TextEditingController();
+  final _areaCtrl = TextEditingController();
+  final _cityCtrl = TextEditingController();
+  final _stateCtrl = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
+  Map? _editing; // null = Add mode
+  bool _saving = false;
+
   @override
   void initState() {
     super.initState();
@@ -29,6 +38,10 @@ class _PincodeScreenState extends State<PincodeScreen> {
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _codeCtrl.dispose();
+    _areaCtrl.dispose();
+    _cityCtrl.dispose();
+    _stateCtrl.dispose();
     super.dispose();
   }
 
@@ -73,66 +86,106 @@ class _PincodeScreenState extends State<PincodeScreen> {
     }
   }
 
-  Future<void> _saveDialog({Map? existing}) async {
-    final codeCtrl  = TextEditingController(text: existing?['code'] ?? '');
-    final areaCtrl  = TextEditingController(text: existing?['area_name'] ?? '');
-    final cityCtrl  = TextEditingController(text: existing?['city'] ?? '');
-    final stateCtrl = TextEditingController(text: existing?['state'] ?? '');
-    final formKey = GlobalKey<FormState>();
+  // Loads a pincode into the right panel for editing (no dialog).
+  void _startEdit(Map p) {
+    setState(() {
+      _editing = p;
+      _codeCtrl.text = p['code']?.toString() ?? '';
+      _areaCtrl.text = p['area_name']?.toString() ?? '';
+      _cityCtrl.text = p['city']?.toString() ?? '';
+      _stateCtrl.text = p['state']?.toString() ?? '';
+    });
+  }
 
-    await showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(existing != null ? 'Edit Pincode' : 'Add Pincode',
-            style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-        content: SizedBox(
-          width: 360.w,
-          child: Form(
-            key: formKey,
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              _field(codeCtrl, 'Pincode', required: true, readOnly: existing != null,
-                  keyboardType: TextInputType.number,
-                  maxLength: 6,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
-              SizedBox(height: 10.h),
-              _field(areaCtrl, 'Area Name', required: true),
-              SizedBox(height: 10.h),
-              _field(cityCtrl, 'City'),
-              SizedBox(height: 10.h),
-              _field(stateCtrl, 'State'),
+  void _resetForm() {
+    setState(() {
+      _editing = null;
+      _codeCtrl.clear();
+      _areaCtrl.clear();
+      _cityCtrl.clear();
+      _stateCtrl.clear();
+    });
+  }
+
+  // Add (no editing) or update (editing) — one right panel does both.
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    final editing = _editing != null;
+    setState(() => _saving = true);
+    try {
+      final body = {
+        if (editing) 'id': _editing!['id'],
+        'code':      _codeCtrl.text.trim(),
+        'area_name': _areaCtrl.text.trim(),
+        'city':      _cityCtrl.text.trim(),
+        'state':     _stateCtrl.text.trim(),
+      };
+      final res = await AdminApi.postJson(
+        Uri.parse(editing ? ApiConstants.ADMIN_PINCODES_EDIT : ApiConstants.ADMIN_PINCODES_ADD),
+        body: body,
+      );
+      final data = jsonDecode(res.body);
+      if (!mounted) return;
+      _showSnack(data['message'] ?? 'Done');
+      if (data['success'] == true || data['success'] == 'true') {
+        _resetForm();
+        _fetchPincodes();
+      }
+    } catch (e) {
+      if (mounted) _showSnack('Error: $e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Widget _buildForm() {
+    final editing = _editing != null;
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceColor,
+        borderRadius: BorderRadius.circular(14.r),
+        border: Border.all(color: AppColors.borderColor),
+        boxShadow: AppColors.cardShadow,
+      ),
+      padding: EdgeInsets.all(18.w),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(editing ? 'Edit Pincode' : 'Add Pincode',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 16.sp)),
+            SizedBox(height: 16.h),
+            _field(_codeCtrl, 'Pincode', required: true, readOnly: editing,
+                keyboardType: TextInputType.number, maxLength: 6,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly]),
+            SizedBox(height: 12.h),
+            _field(_areaCtrl, 'Area Name', required: true),
+            SizedBox(height: 12.h),
+            _field(_cityCtrl, 'City'),
+            SizedBox(height: 12.h),
+            _field(_stateCtrl, 'State'),
+            SizedBox(height: 18.h),
+            Row(children: [
+              Expanded(
+                child: _saving
+                    ? const Center(child: CircularProgressIndicator())
+                    : ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryColor),
+                        onPressed: _save,
+                        child: Text(editing ? 'Save' : 'Add',
+                            style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600)),
+                      ),
+              ),
+              SizedBox(width: 10.w),
+              OutlinedButton(
+                onPressed: _resetForm,
+                child: Text(editing ? 'Cancel' : 'Reset', style: GoogleFonts.poppins()),
+              ),
             ]),
-          ),
+          ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryColor),
-            onPressed: () async {
-              if (!formKey.currentState!.validate()) return;
-              Navigator.pop(context);
-              final body = {
-                if (existing != null) 'id': existing['id'],
-                'code':      codeCtrl.text.trim(),
-                'area_name': areaCtrl.text.trim(),
-                'city':      cityCtrl.text.trim(),
-                'state':     stateCtrl.text.trim(),
-              };
-              final url = existing != null ? ApiConstants.ADMIN_PINCODES_EDIT : ApiConstants.ADMIN_PINCODES_ADD;
-              try {
-                final res = await AdminApi.postJson(
-                  Uri.parse(url),
-                  body: body,
-                );
-                final data = jsonDecode(res.body);
-                if (mounted) { _showSnack(data['message'] ?? 'Done'); _fetchPincodes(); }
-              } catch (e) {
-                if (mounted) _showSnack('Error: $e');
-              }
-            },
-            child: Text(existing != null ? 'Update' : 'Add',
-                style: const TextStyle(color: Colors.white)),
-          ),
-        ],
       ),
     );
   }
@@ -247,15 +300,29 @@ class _PincodeScreenState extends State<PincodeScreen> {
       backgroundColor: AppColors.backgroundColor,
       body: Column(children: [
         _buildHeader(),
-        _buildSearchBar(),
-        Expanded(child: _buildList()),
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 3,
+                child: Column(children: [
+                  _buildSearchBar(),
+                  Expanded(child: _buildList()),
+                ]),
+              ),
+              const VerticalDivider(width: 1),
+              SizedBox(
+                width: 340.w,
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.all(18.w),
+                  child: _buildForm(),
+                ),
+              ),
+            ],
+          ),
+        ),
       ]),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _saveDialog(),
-        backgroundColor: AppColors.primaryColor,
-        icon: const Icon(Icons.add_location_alt_rounded, color: Colors.white),
-        label: Text('Add Pincode', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600)),
-      ),
     );
   }
 
@@ -337,9 +404,10 @@ class _PincodeScreenState extends State<PincodeScreen> {
   Widget _pincodeRow(Map p) {
     final isActive = p['is_active'] == true;
     final vendorCount = p['vendor_count'] ?? 0;
+    final selected = _editing != null && _editing!['id'] == p['id'];
 
     return Material(
-      color: AppColors.surfaceColor,
+      color: selected ? AppColors.primaryLight : AppColors.surfaceColor,
       borderRadius: BorderRadius.circular(10.r),
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
@@ -388,32 +456,32 @@ class _PincodeScreenState extends State<PincodeScreen> {
             onChanged: (_) => _toggle(p['id']),
             activeColor: AppColors.primaryColor,
           ),
-          PopupMenuButton<String>(
-            onSelected: (val) {
-              if (val == 'edit') _saveDialog(existing: p);
-              if (val == 'delete') {
-                showDialog(
-                  context: context,
-                  builder: (_) => AlertDialog(
-                    title: Text('Delete ${p['code']}?',
-                        style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-                    content: const Text('This will also remove it from vendors\' service areas.'),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                        onPressed: () { Navigator.pop(context); _delete(p['id']); },
-                        child: const Text('Delete', style: TextStyle(color: Colors.white)),
-                      ),
-                    ],
-                  ),
-                );
-              }
+          IconButton(
+            icon: Icon(Icons.edit_outlined, color: AppColors.primaryColor, size: 18.sp),
+            tooltip: 'Edit',
+            onPressed: () => _startEdit(p),
+          ),
+          IconButton(
+            icon: Icon(Icons.delete_outline, color: Colors.red, size: 18.sp),
+            tooltip: 'Delete',
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (_) => AlertDialog(
+                  title: Text('Delete ${p['code']}?',
+                      style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                  content: const Text('This will also remove it from vendors\' service areas.'),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                      onPressed: () { Navigator.pop(context); _delete(p['id']); },
+                      child: const Text('Delete', style: TextStyle(color: Colors.white)),
+                    ),
+                  ],
+                ),
+              );
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'edit',   child: Text('✏️ Edit')),
-              PopupMenuItem(value: 'delete', child: Text('🗑 Delete')),
-            ],
           ),
         ]),
       ),

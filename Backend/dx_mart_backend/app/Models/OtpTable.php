@@ -6,5 +6,5 @@ class OtpTable extends Model
 {
     public $timestamps = false;
     protected $table = 'otp_table';
-    protected $fillable = ['email', 'otp', 'expiry'];
+    protected $fillable = ['email', 'otp', 'expiry', 'reset_token'];
 }

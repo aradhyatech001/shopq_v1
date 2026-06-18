@@ -17,10 +17,29 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
   List _plans = [];
   bool _loading = false;
 
+  // Right-panel Add/Edit form (split layout).
+  final _nameCtrl = TextEditingController();
+  final _priceCtrl = TextEditingController();
+  final _maxCtrl = TextEditingController(text: '0');
+  final _featCtrl = TextEditingController();
+  String _durationType = 'monthly';
+  final _formKey = GlobalKey<FormState>();
+  Map? _editing; // null = Add mode
+  bool _saving = false;
+
   @override
   void initState() {
     super.initState();
     _fetchPlans();
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _priceCtrl.dispose();
+    _maxCtrl.dispose();
+    _featCtrl.dispose();
+    super.dispose();
   }
 
   // ── API ───────────────────────────────────────────────────
@@ -67,90 +86,117 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
     }
   }
 
-  Future<void> _save({Map? existing}) async {
-    final nameCtrl    = TextEditingController(text: existing?['name'] ?? '');
-    final priceCtrl   = TextEditingController(text: existing?['price']?.toString() ?? '');
-    final maxCtrl     = TextEditingController(text: existing?['max_products']?.toString() ?? '0');
-    final featCtrl    = TextEditingController(
-        text: (existing?['features'] as List?)?.join(', ') ?? '');
-    String durationType = existing?['duration_type'] ?? 'monthly';
-    final formKey = GlobalKey<FormState>();
+  // Loads a plan into the right panel for editing (no dialog).
+  void _startEdit(Map plan) {
+    setState(() {
+      _editing = plan;
+      _nameCtrl.text = plan['name']?.toString() ?? '';
+      _priceCtrl.text = plan['price']?.toString() ?? '';
+      _maxCtrl.text = plan['max_products']?.toString() ?? '0';
+      _featCtrl.text = (plan['features'] as List?)?.join(', ') ?? '';
+      _durationType = plan['duration_type']?.toString() ?? 'monthly';
+    });
+  }
 
-    await showDialog(
-      context: context,
-      builder: (_) => StatefulBuilder(
-        builder: (ctx, setLocal) => AlertDialog(
-          title: Text(
-            existing != null ? 'Edit Plan' : 'Add Plan',
-            style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-          ),
-          content: SizedBox(
-            width: 400.w,
-            child: Form(
-              key: formKey,
-              child: SingleChildScrollView(
-                child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  _field(nameCtrl, 'Plan Name', required: true),
-                  SizedBox(height: 12.h),
-                  _field(priceCtrl, 'Price (₹)', keyboardType: TextInputType.number, required: true),
-                  SizedBox(height: 12.h),
-                  DropdownButtonFormField<String>(
-                    value: durationType,
-                    decoration: InputDecoration(
-                      labelText: 'Duration Type',
-                      border: const OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.h),
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: 'monthly', child: Text('Monthly (30 days)')),
-                      DropdownMenuItem(value: 'yearly',  child: Text('Yearly (365 days)')),
-                    ],
-                    onChanged: (v) => setLocal(() => durationType = v!),
-                  ),
-                  SizedBox(height: 12.h),
-                  _field(maxCtrl, 'Max Products (0 = unlimited)', keyboardType: TextInputType.number),
-                  SizedBox(height: 12.h),
-                  _field(featCtrl, 'Features (comma separated)'),
-                ]),
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryColor),
-              onPressed: () async {
-                if (!formKey.currentState!.validate()) return;
-                Navigator.pop(ctx);
+  void _resetForm() {
+    setState(() {
+      _editing = null;
+      _nameCtrl.clear();
+      _priceCtrl.clear();
+      _maxCtrl.text = '0';
+      _featCtrl.clear();
+      _durationType = 'monthly';
+    });
+  }
 
-                final body = {
-                  if (existing != null) 'id': existing['id'],
-                  'name':          nameCtrl.text.trim(),
-                  'price':         double.tryParse(priceCtrl.text.trim()) ?? 0,
-                  'duration_type': durationType,
-                  'max_products':  int.tryParse(maxCtrl.text.trim()) ?? 0,
-                  'features':      featCtrl.text.trim(),
-                };
-                final url = existing != null ? ApiConstants.ADMIN_PLANS_EDIT : ApiConstants.ADMIN_PLANS_ADD;
-                try {
-                  final res = await AdminApi.postJson(
-                    Uri.parse(url),
-                    body: body,
-                  );
-                  final data = jsonDecode(res.body);
-                  if (mounted) {
-                    _showSnack(data['message'] ?? 'Done');
-                    _fetchPlans();
-                  }
-                } catch (e) {
-                  if (mounted) _showSnack('Error: $e');
-                }
-              },
-              child: Text(
-                existing != null ? 'Update' : 'Add',
-                style: const TextStyle(color: Colors.white),
+  // Add (no editing) or update (editing) — one right panel does both.
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    final editing = _editing != null;
+    setState(() => _saving = true);
+    try {
+      final body = {
+        if (editing) 'id': _editing!['id'],
+        'name':          _nameCtrl.text.trim(),
+        'price':         double.tryParse(_priceCtrl.text.trim()) ?? 0,
+        'duration_type': _durationType,
+        'max_products':  int.tryParse(_maxCtrl.text.trim()) ?? 0,
+        'features':      _featCtrl.text.trim(),
+      };
+      final url = editing ? ApiConstants.ADMIN_PLANS_EDIT : ApiConstants.ADMIN_PLANS_ADD;
+      final res = await AdminApi.postJson(Uri.parse(url), body: body);
+      final data = jsonDecode(res.body);
+      if (!mounted) return;
+      _showSnack(data['message'] ?? 'Done');
+      if (data['success'] == true || data['success'] == 'true') {
+        _resetForm();
+        _fetchPlans();
+      }
+    } catch (e) {
+      if (mounted) _showSnack('Error: $e');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Widget _buildForm() {
+    final editing = _editing != null;
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceColor,
+        borderRadius: BorderRadius.circular(14.r),
+        border: Border.all(color: AppColors.borderColor),
+        boxShadow: AppColors.cardShadow,
+      ),
+      padding: EdgeInsets.all(18.w),
+      child: Form(
+        key: _formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(editing ? 'Edit Plan' : 'Add Plan',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w700, fontSize: 16.sp)),
+            SizedBox(height: 16.h),
+            _field(_nameCtrl, 'Plan Name', required: true),
+            SizedBox(height: 12.h),
+            _field(_priceCtrl, 'Price (₹)', keyboardType: TextInputType.number, required: true),
+            SizedBox(height: 12.h),
+            DropdownButtonFormField<String>(
+              initialValue: _durationType,
+              decoration: InputDecoration(
+                labelText: 'Duration Type',
+                border: const OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 12.h),
               ),
+              items: const [
+                DropdownMenuItem(value: 'monthly', child: Text('Monthly (30 days)')),
+                DropdownMenuItem(value: 'yearly',  child: Text('Yearly (365 days)')),
+              ],
+              onChanged: (v) => setState(() => _durationType = v!),
             ),
+            SizedBox(height: 12.h),
+            _field(_maxCtrl, 'Max Products (0 = unlimited)', keyboardType: TextInputType.number),
+            SizedBox(height: 12.h),
+            _field(_featCtrl, 'Features (comma separated)'),
+            SizedBox(height: 18.h),
+            Row(children: [
+              Expanded(
+                child: _saving
+                    ? const Center(child: CircularProgressIndicator())
+                    : ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryColor),
+                        onPressed: _save,
+                        child: Text(editing ? 'Save' : 'Add',
+                            style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600)),
+                      ),
+              ),
+              SizedBox(width: 10.w),
+              OutlinedButton(
+                onPressed: _resetForm,
+                child: Text(editing ? 'Cancel' : 'Reset', style: GoogleFonts.poppins()),
+              ),
+            ]),
           ],
         ),
       ),
@@ -182,14 +228,23 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
       backgroundColor: AppColors.backgroundColor,
       body: Column(children: [
         _buildHeader(),
-        Expanded(child: _buildContent()),
+        Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: 3, child: _buildContent()),
+              const VerticalDivider(width: 1),
+              SizedBox(
+                width: 360.w,
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.all(18.w),
+                  child: _buildForm(),
+                ),
+              ),
+            ],
+          ),
+        ),
       ]),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _save(),
-        backgroundColor: AppColors.primaryColor,
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: Text('Add Plan', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600)),
-      ),
     );
   }
 
@@ -227,9 +282,10 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
     final isActive = plan['is_active'] == true;
     final features = (plan['features'] as List?) ?? [];
     final isMonthly = plan['duration_type'] == 'monthly';
+    final selected = _editing != null && _editing!['id'] == plan['id'];
 
     return Material(
-      color: AppColors.surfaceColor,
+      color: selected ? AppColors.primaryLight : AppColors.surfaceColor,
       borderRadius: BorderRadius.circular(14.r),
       child: Padding(
         padding: EdgeInsets.all(18.w),
@@ -260,31 +316,31 @@ class _SubscriptionPlansScreenState extends State<SubscriptionPlansScreen> {
               onChanged: (_) => _toggle(plan['id']),
               activeColor: AppColors.primaryColor,
             ),
-            PopupMenuButton<String>(
-              onSelected: (val) {
-                if (val == 'edit')   _save(existing: plan);
-                if (val == 'delete') {
-                  showDialog(
-                    context: context,
-                    builder: (_) => AlertDialog(
-                      title: Text('Delete Plan', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-                      content: const Text('Are you sure? Active vendor subscriptions may be affected.'),
-                      actions: [
-                        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                          onPressed: () { Navigator.pop(context); _delete(plan['id']); },
-                          child: const Text('Delete', style: TextStyle(color: Colors.white)),
-                        ),
-                      ],
-                    ),
-                  );
-                }
+            IconButton(
+              icon: Icon(Icons.edit_outlined, color: AppColors.primaryColor, size: 18.sp),
+              tooltip: 'Edit',
+              onPressed: () => _startEdit(plan),
+            ),
+            IconButton(
+              icon: Icon(Icons.delete_outline, color: Colors.red, size: 18.sp),
+              tooltip: 'Delete',
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    title: Text('Delete Plan', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                    content: const Text('Are you sure? Active vendor subscriptions may be affected.'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                        onPressed: () { Navigator.pop(context); _delete(plan['id']); },
+                        child: const Text('Delete', style: TextStyle(color: Colors.white)),
+                      ),
+                    ],
+                  ),
+                );
               },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'edit',   child: Text('✏️ Edit')),
-                PopupMenuItem(value: 'delete', child: Text('🗑 Delete')),
-              ],
             ),
           ]),
           SizedBox(height: 10.h),

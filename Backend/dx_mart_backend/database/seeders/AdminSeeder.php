@@ -14,7 +14,7 @@ class AdminSeeder extends Seeder
         DB::table('admin')->truncate();
         DB::statement('SET FOREIGN_KEY_CHECKS=1');
         DB::table('admin')->insert([
-            ['email' => 'admin@dxmart.com', 'password' => Hash::make('Admin@123'), 'created_at' => now(), 'updated_at' => now()],
+            ['email' => 'admin@shopq.com', 'password' => Hash::make('Admin@123'), 'created_at' => now(), 'updated_at' => now()],
         ]);
     }
 }

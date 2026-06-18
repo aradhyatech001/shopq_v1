@@ -27,6 +27,9 @@ class _ForgetPasswordState extends State<ForgetPassword> {
   bool otpVerified = false;
   bool isLoading = false;
   bool _isPasswordVisible = false;
+  // One-time reset token issued by the backend after OTP verification.
+  // Must be sent with the resetPassword call — prevents skipping OTP step.
+  String _resetToken = '';
 
   Future<void> sendOTP() async {
     if (mounted) setState(() => isLoading = true);
@@ -75,6 +78,9 @@ class _ForgetPasswordState extends State<ForgetPassword> {
       setState(() => isLoading = false);
 
       if (data["status"] == "success") {
+        // Backend returns a one-time reset_token after OTP verification.
+        // Store it so we can send it with the password reset request.
+        _resetToken = data["reset_token"] ?? '';
         setState(() => otpVerified = true);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -107,7 +113,11 @@ class _ForgetPasswordState extends State<ForgetPassword> {
   Future<void> resetPassword() async {
     if (mounted) setState(() => isLoading = true);
     try {
-      final response = await ApiHelper.post(ApiConstants.RESET_PASSWORD, body: {"email": emailController.text, "new_password": passwordController.text});
+      final response = await ApiHelper.post(ApiConstants.RESET_PASSWORD, body: {
+        "email": emailController.text,
+        "new_password": passwordController.text,
+        "reset_token": _resetToken,
+      });
 
       final data = jsonDecode(response.body);
       if (!mounted) return;

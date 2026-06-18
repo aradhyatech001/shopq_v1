@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -25,6 +25,7 @@ class _CouponCodeScreenState extends State<CouponCodeScreen> {
   final _dateCtrl = TextEditingController();
   String? _status;
   bool _saving = false;
+  Map? _editingCoupon; // null = the panel is in "Add" mode
 
   // ── List state ────────────────────────────────────────────
   List<Map<String, dynamic>> _coupons = [];
@@ -70,6 +71,21 @@ class _CouponCodeScreenState extends State<CouponCodeScreen> {
     }
   }
 
+  // Loads a coupon into the right panel for editing (no separate sheet).
+  void _startEdit(Map<String, dynamic> coupon) {
+    final raw = (coupon['status'] ?? 'Public').toString().toLowerCase();
+    setState(() {
+      _editingCoupon = coupon;
+      _titleCtrl.text = coupon['title']?.toString() ?? '';
+      _descCtrl.text = coupon['description']?.toString() ?? '';
+      _codeCtrl.text = coupon['code_name']?.toString() ?? '';
+      _discountCtrl.text = coupon['discount']?.toString() ?? '';
+      _minAmtCtrl.text = coupon['min_amount']?.toString() ?? '';
+      _dateCtrl.text = coupon['expri_date']?.toString() ?? '';
+      _status = raw == 'private' ? 'Private' : 'Public';
+    });
+  }
+
   Future<void> _addCoupon() async {
     if (_titleCtrl.text.isEmpty) {
       _snack('Title required', AppColors.warningColor);
@@ -96,23 +112,26 @@ class _CouponCodeScreenState extends State<CouponCodeScreen> {
       return;
     }
 
+    final editing = _editingCoupon != null;
     setState(() => _saving = true);
     try {
+      final body = <String, String>{
+        'title': _titleCtrl.text.toUpperCase(),
+        'description': _descCtrl.text,
+        'code_name': _codeCtrl.text.toUpperCase(),
+        'discount': _discountCtrl.text,
+        'min_amount': _minAmtCtrl.text,
+        'expri_date': _dateCtrl.text,
+        'status': _status!,
+      };
+      if (editing) body['id'] = _editingCoupon!['id'].toString();
       final res = await AdminApi.post(
-        Uri.parse(ApiConstants.ADD_COUPON),
-        body: {
-          'title': _titleCtrl.text.toUpperCase(),
-          'description': _descCtrl.text,
-          'code_name': _codeCtrl.text.toUpperCase(),
-          'discount': _discountCtrl.text,
-          'min_amount': _minAmtCtrl.text,
-          'expri_date': _dateCtrl.text,
-          'status': _status!,
-        },
+        Uri.parse(editing ? ApiConstants.EDIT_COUPON : ApiConstants.ADD_COUPON),
+        body: body,
       );
       final data = jsonDecode(res.body);
       if (data['success'] == 'true' || data['success'] == true) {
-        _snack('Coupon added!', AppColors.successColor);
+        _snack(editing ? 'Coupon updated!' : 'Coupon added!', AppColors.successColor);
         _resetForm();
         _fetchCoupons();
       } else {
@@ -123,157 +142,6 @@ class _CouponCodeScreenState extends State<CouponCodeScreen> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
-  }
-
-  void _showEditCoupon(Map<String, dynamic> coupon) {
-    final titleCtrl = TextEditingController(text: coupon['title']?.toString() ?? '');
-    final descCtrl = TextEditingController(text: coupon['description']?.toString() ?? '');
-    final codeCtrl = TextEditingController(text: coupon['code_name']?.toString() ?? '');
-    final discountCtrl = TextEditingController(text: coupon['discount']?.toString() ?? '');
-    final minAmtCtrl = TextEditingController(text: coupon['min_amount']?.toString() ?? '');
-    final dateCtrl = TextEditingController(text: coupon['expri_date']?.toString() ?? '');
-    final rawStatus = (coupon['status'] ?? 'Public').toString().toLowerCase();
-    String status = rawStatus == 'private' ? 'Private' : 'Public';
-    bool saving = false;
-
-    Widget field(TextEditingController c, String label,
-        {TextInputType type = TextInputType.text, int? maxLen}) {
-      return Padding(
-        padding: EdgeInsets.only(bottom: 12.h),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            FormLabel(label),
-            TextField(
-              controller: c,
-              keyboardType: type,
-              maxLength: maxLen,
-              style: GoogleFonts.jost(fontSize: 13.sp),
-              decoration: InputDecoration(counterText: '', hintText: label),
-            ),
-          ],
-        ),
-      );
-    }
-
-    showAdminSideSheet(
-      context,
-      barrierDismissible: false,
-      child: StatefulBuilder(
-        builder: (ctx, setS) => AdminSideSheet(
-          title: 'Edit Coupon',
-          child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  field(titleCtrl, 'Title', maxLen: 16),
-                  field(descCtrl, 'Description', maxLen: 28),
-                  field(codeCtrl, 'Code (no spaces)', maxLen: 10),
-                  field(discountCtrl, 'Discount %', type: TextInputType.number, maxLen: 5),
-                  field(minAmtCtrl, 'Min Order Value', type: TextInputType.number),
-                  const FormLabel('Expiry Date', required: true),
-                  TextField(
-                    controller: dateCtrl,
-                    readOnly: true,
-                    style: GoogleFonts.jost(fontSize: 13.sp),
-                    decoration: InputDecoration(
-                      hintText: 'Pick a date',
-                      suffixIcon: const Icon(Icons.calendar_today_outlined,
-                          color: AppColors.hintTextColor),
-                    ),
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: ctx,
-                        initialDate: DateTime.now(),
-                        firstDate: DateTime.now(),
-                        lastDate: DateTime(2100),
-                      );
-                      if (picked != null) {
-                        dateCtrl.text = '${picked.day.toString().padLeft(2, '0')}-'
-                            '${picked.month.toString().padLeft(2, '0')}-'
-                            '${picked.year}';
-                      }
-                    },
-                  ),
-                  SizedBox(height: 12.h),
-                  const FormLabel('Status', required: true),
-                  Container(
-                    height: 44.h,
-                    padding: EdgeInsets.symmetric(horizontal: 12.w),
-                    decoration: BoxDecoration(
-                      color: AppColors.backgroundColor,
-                      borderRadius: BorderRadius.circular(10.r),
-                      border: Border.all(color: AppColors.borderColor),
-                    ),
-                    child: DropdownButton<String>(
-                      value: status,
-                      isExpanded: true,
-                      underline: const SizedBox.shrink(),
-                      style: GoogleFonts.jost(fontSize: 13.sp, color: AppColors.primaryTextColor),
-                      items: ['Public', 'Private']
-                          .map((s) => DropdownMenuItem(
-                              value: s, child: Text(s, style: GoogleFonts.jost(fontSize: 13.sp))))
-                          .toList(),
-                      onChanged: (v) => setS(() => status = v ?? 'Public'),
-                    ),
-                  ),
-                ],
-              ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: GoogleFonts.jost())),
-            ElevatedButton(
-              onPressed: saving
-                  ? null
-                  : () async {
-                      if (titleCtrl.text.isEmpty ||
-                          codeCtrl.text.isEmpty ||
-                          discountCtrl.text.isEmpty ||
-                          minAmtCtrl.text.isEmpty ||
-                          dateCtrl.text.isEmpty) {
-                        _snack('All fields are required', AppColors.warningColor);
-                        return;
-                      }
-                      setS(() => saving = true);
-                      try {
-                        final res = await AdminApi.post(
-                          Uri.parse(ApiConstants.EDIT_COUPON),
-                          body: {
-                            'id': coupon['id'].toString(),
-                            'title': titleCtrl.text.toUpperCase(),
-                            'description': descCtrl.text,
-                            'code_name': codeCtrl.text.toUpperCase(),
-                            'discount': discountCtrl.text,
-                            'min_amount': minAmtCtrl.text,
-                            'expri_date': dateCtrl.text,
-                            'status': status,
-                          },
-                        );
-                        final data = jsonDecode(res.body);
-                        if (data['success'] == true) {
-                          if (ctx.mounted) Navigator.pop(ctx);
-                          _snack('Coupon updated!', AppColors.successColor);
-                          _fetchCoupons();
-                        } else {
-                          _snack(data['message'] ?? 'Failed', AppColors.errorColor);
-                        }
-                      } catch (e) {
-                        _snack('Error: $e', AppColors.errorColor);
-                      } finally {
-                        setS(() => saving = false);
-                      }
-                    },
-              child: saving
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                    )
-                  : Text('Save', style: GoogleFonts.jost(color: Colors.white)),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   Future<void> _deleteCoupon(String id) async {
@@ -309,7 +177,10 @@ class _CouponCodeScreenState extends State<CouponCodeScreen> {
     ]) {
       c.clear();
     }
-    setState(() => _status = null);
+    setState(() {
+      _status = null;
+      _editingCoupon = null;
+    });
   }
 
   void _snack(String msg, Color color) {
@@ -358,7 +229,7 @@ class _CouponCodeScreenState extends State<CouponCodeScreen> {
                     separatorBuilder: (_, __) => SizedBox(height: 12.h),
                     itemBuilder: (_, i) => _CouponTile(
                       coupon: _coupons[i],
-                      onEdit: () => _showEditCoupon(_coupons[i]),
+                      onEdit: () => _startEdit(_coupons[i]),
                       onDelete: () =>
                           _deleteCoupon(_coupons[i]['id'].toString()),
                       onCopy: () =>
@@ -388,8 +259,9 @@ class _CouponCodeScreenState extends State<CouponCodeScreen> {
   }
 
   Widget _buildForm() {
+    final editing = _editingCoupon != null;
     return SectionCard(
-      title: 'Add Coupon',
+      title: editing ? 'Edit Coupon' : 'Add Coupon',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -490,7 +362,7 @@ class _CouponCodeScreenState extends State<CouponCodeScreen> {
                     : ElevatedButton(
                         onPressed: _addCoupon,
                         child: Text(
-                          'Add Coupon',
+                          editing ? 'Save' : 'Add Coupon',
                           style: GoogleFonts.jost(fontWeight: FontWeight.w600),
                         ),
                       ),
@@ -498,7 +370,7 @@ class _CouponCodeScreenState extends State<CouponCodeScreen> {
               SizedBox(width: 10.w),
               OutlinedButton(
                 onPressed: _resetForm,
-                child: Text('Reset', style: GoogleFonts.jost()),
+                child: Text(editing ? 'Cancel' : 'Reset', style: GoogleFonts.jost()),
               ),
             ],
           ),

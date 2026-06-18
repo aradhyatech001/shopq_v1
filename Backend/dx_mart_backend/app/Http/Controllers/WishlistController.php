@@ -12,14 +12,14 @@ use App\Models\MainCategory;
 
 class WishlistController extends Controller
 {
+    // All wishlist routes are behind auth:sanctum. user_id always comes from
+    // the verified token — never from request params (IDOR prevention).
+
     public function add(Request $request)
     {
-        $userId    = (int) $request->input('user_id', 0);
+        $userId    = $request->user()->id;
         $productId = (int) $request->input('product_id', 0);
-        if (!$userId || !$productId) return response()->json(['success' => false, 'message' => 'Missing parameters']);
-        if (!\App\Models\User::whereKey($userId)->exists()) {
-            return response()->json(['success' => false, 'code' => 'invalid_user', 'message' => 'Session expired. Please log in again.']);
-        }
+        if (!$productId) return response()->json(['success' => false, 'message' => 'Missing product_id']);
 
         Wishlist::firstOrCreate(['user_id' => $userId, 'product_id' => $productId]);
         return response()->json(['success' => true, 'message' => 'Added to wishlist']);
@@ -27,9 +27,9 @@ class WishlistController extends Controller
 
     public function check(Request $request)
     {
-        $userId    = (int) $request->query('user_id', 0);
+        $userId    = $request->user()->id;
         $productId = (int) $request->query('product_id', 0);
-        if (!$userId || !$productId) return response()->json(['success' => false, 'message' => 'Missing parameters']);
+        if (!$productId) return response()->json(['success' => false, 'message' => 'Missing product_id']);
 
         $exists = Wishlist::where('user_id', $userId)->where('product_id', $productId)->exists();
         return response()->json(['success' => true, 'is_wishlisted' => $exists]);
@@ -37,10 +37,9 @@ class WishlistController extends Controller
 
     public function get(Request $request)
     {
-        $userId = (int) $request->query('user_id', 0);
+        $userId = $request->user()->id;
         $page   = max(1, (int) $request->query('page', 1));
         $limit  = max(1, (int) $request->query('limit', 10));
-        if (!$userId) return response()->json(['success' => false, 'message' => 'User ID required']);
 
         $offset = ($page - 1) * $limit;
         $total  = Wishlist::where('user_id', $userId)->count();
@@ -53,6 +52,7 @@ class WishlistController extends Controller
             $p = $w->product;
             return [
                 'wishlist_id'        => $w->id,
+                'product_id'         => $p->id,   // kept for Flutter remove() call
                 'id'                 => $p->id,
                 'name'               => $p->name,
                 'description'        => $p->description,
@@ -71,9 +71,9 @@ class WishlistController extends Controller
 
     public function remove(Request $request)
     {
-        $userId    = (int) $request->input('user_id', 0);
+        $userId    = $request->user()->id;
         $productId = (int) $request->input('product_id', 0);
-        if (!$userId || !$productId) return response()->json(['success' => false, 'message' => 'Missing parameters']);
+        if (!$productId) return response()->json(['success' => false, 'message' => 'Missing product_id']);
 
         Wishlist::where('user_id', $userId)->where('product_id', $productId)->delete();
         return response()->json(['success' => true, 'message' => 'Removed from wishlist']);

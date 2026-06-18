@@ -23,6 +23,9 @@ class AuthController extends Controller
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             return response()->json(['status' => 'error', 'message' => 'Please enter a valid email'], 422);
         }
+        if (strlen($password) < 8) {
+            return response()->json(['status' => 'error', 'message' => 'Password must be at least 8 characters'], 422);
+        }
         if (User::whereRaw('LOWER(email) = ?', [$email])->exists()) {
             return response()->json(['status' => 'error', 'message' => 'Email already registered'], 409);
         }
@@ -66,12 +69,13 @@ class AuthController extends Controller
 
     public function getUser(Request $request)
     {
-        $email = strtolower(trim($request->query('email', '')));
-        $user  = User::whereRaw('LOWER(email) = ?', [$email])->first();
-        if ($user) {
-            return response()->json(['status' => 'success', 'user' => $user]);
-        }
-        return response()->json(['status' => 'error', 'message' => 'User not found'], 404);
+        // Now behind auth:sanctum — return the token's own user (id + name only).
+        // The old email-based lookup is removed to prevent data enumeration.
+        $user = $request->user();
+        return response()->json([
+            'status' => 'success',
+            'user'   => ['id' => $user->id, 'name' => $user->name, 'email' => $user->email],
+        ]);
     }
 
     public function getAllUsers(Request $request)
@@ -137,24 +141,55 @@ class AuthController extends Controller
     {
         $email = strtolower(trim($request->input('email', '')));
         $otp   = $request->input('otp');
-        $valid = OtpTable::where('email', $email)->where('otp', $otp)->where('expiry', '>', time())->exists();
-        if ($valid) {
-            return response()->json(['status' => 'success', 'message' => 'OTP Verified']);
+
+        $row = OtpTable::where('email', $email)
+            ->where('otp', $otp)
+            ->where('expiry', '>', time())
+            ->first();
+
+        if (!$row) {
+            return response()->json(['status' => 'error', 'message' => 'Invalid or Expired OTP'], 422);
         }
-        return response()->json(['status' => 'error', 'message' => 'Invalid or Expired OTP'], 422);
+
+        // Invalidate the numeric OTP immediately so it cannot be replayed, and
+        // replace it with a one-time reset token valid for 15 minutes.
+        $resetToken = \Illuminate\Support\Str::random(64);
+        $row->update(['otp' => null, 'expiry' => time() + 900, 'reset_token' => $resetToken]);
+
+        return response()->json(['status' => 'success', 'message' => 'OTP Verified', 'reset_token' => $resetToken]);
     }
 
     public function resetPassword(Request $request)
     {
-        $email    = strtolower(trim($request->input('email', '')));
-        $newPass  = $request->input('new_password', '');
-        if (!$email || strlen($newPass) < 4) {
-            return response()->json(['status' => 'error', 'message' => 'A valid email and a password of at least 4 characters are required'], 422);
+        $email      = strtolower(trim($request->input('email', '')));
+        $newPass    = $request->input('new_password', '');
+        $resetToken = trim($request->input('reset_token', ''));
+
+        if (!$email || strlen($newPass) < 8) {
+            return response()->json(['status' => 'error', 'message' => 'A valid email and a password of at least 8 characters are required'], 422);
         }
+
+        // Require a valid reset_token issued by verifyOtp; prevents resetting a
+        // password without ever verifying the OTP (broken access control fix).
+        if (!$resetToken) {
+            return response()->json(['status' => 'error', 'message' => 'Reset token required'], 422);
+        }
+        $validToken = OtpTable::where('email', $email)
+            ->where('reset_token', $resetToken)
+            ->where('expiry', '>', time())
+            ->exists();
+        if (!$validToken) {
+            return response()->json(['status' => 'error', 'message' => 'Invalid or expired reset token'], 422);
+        }
+
         $affected = User::whereRaw('LOWER(email) = ?', [$email])->update(['password' => Hash::make($newPass)]);
         if (!$affected) {
             return response()->json(['status' => 'error', 'message' => 'Email not registered'], 404);
         }
+
+        // Consume the reset token so it cannot be reused.
+        OtpTable::where('email', $email)->delete();
+
         return response()->json(['status' => 'success', 'message' => 'Password Updated']);
     }
 

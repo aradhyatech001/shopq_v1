@@ -26,6 +26,9 @@ class _SectionBuilderScreenState extends State<SectionBuilderScreen> {
   List _banners = [];
   bool _loading = true;
 
+  // Right-panel form (wide screens). Always visible; _formSection null = Add mode.
+  Map? _formSection;
+
   int get _tabId => widget.tab['id'] as int;
 
   static const Map<String, String> _typeLabels = {
@@ -105,50 +108,64 @@ class _SectionBuilderScreenState extends State<SectionBuilderScreen> {
           ],
         ),
         iconTheme: const IconThemeData(color: AppColors.primaryTextColor),
-        actions: [
-          Padding(
-            padding: EdgeInsets.only(right: 12.w),
-            child: FilledButton.icon(
-              onPressed: () => _openForm(),
-              icon: const Icon(Icons.add, size: 18),
-              label: Text('Add Section', style: GoogleFonts.jost(fontWeight: FontWeight.w600)),
-              style: FilledButton.styleFrom(backgroundColor: AppColors.primaryColor),
-            ),
-          ),
-        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _sections.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.dashboard_customize_outlined,
-                          size: 56.sp, color: AppColors.hintTextColor),
-                      SizedBox(height: 12.h),
-                      Text('No sections yet',
-                          style: GoogleFonts.jost(
-                              fontSize: 15.sp, color: AppColors.secondaryTextColor)),
-                      SizedBox(height: 4.h),
-                      Text('Add banners, category grids and product rows.',
-                          style: GoogleFonts.jost(
-                              fontSize: 12.sp, color: AppColors.hintTextColor)),
-                      SizedBox(height: 16.h),
-                      OutlinedButton.icon(
-                        onPressed: () => _openForm(),
-                        icon: const Icon(Icons.add),
-                        label: Text('Add first section', style: GoogleFonts.jost()),
+          : (MediaQuery.of(context).size.width >= 900)
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(flex: 5, child: _listBody()),
+                    const VerticalDivider(width: 1, color: AppColors.borderColor),
+                    // Add/Edit panel is always visible — defaults to Add mode.
+                    Expanded(
+                      flex: 3,
+                      child: _SectionForm(
+                        key: ValueKey(_formSection?['id'] ?? 'new'),
+                        tabId: _tabId,
+                        productTypes: _productTypes,
+                        categories: _categories,
+                        banners: _banners,
+                        existing: _formSection,
+                        onSaved: _load,
+                        snack: _snack,
+                        onClose: _closePanel,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 )
-              : ReorderableListView.builder(
-                  padding: EdgeInsets.all(16.w),
-                  itemCount: _sections.length,
-                  onReorder: _onReorder,
-                  itemBuilder: (_, i) => _sectionCard(_sections[i], i, key: ValueKey(_sections[i]['id'])),
-                ),
+              : _listBody(),
+    );
+  }
+
+  Widget _listBody() {
+    if (_sections.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.dashboard_customize_outlined, size: 56.sp, color: AppColors.hintTextColor),
+            SizedBox(height: 12.h),
+            Text('No sections yet',
+                style: GoogleFonts.jost(fontSize: 15.sp, color: AppColors.secondaryTextColor)),
+            SizedBox(height: 4.h),
+            Text('Add banners, category grids and product rows.',
+                style: GoogleFonts.jost(fontSize: 12.sp, color: AppColors.hintTextColor)),
+            SizedBox(height: 16.h),
+            OutlinedButton.icon(
+              onPressed: () => _openForm(),
+              icon: const Icon(Icons.add),
+              label: Text('Add first section', style: GoogleFonts.jost()),
+            ),
+          ],
+        ),
+      );
+    }
+    return ReorderableListView.builder(
+      padding: EdgeInsets.all(16.w),
+      itemCount: _sections.length,
+      onReorder: _onReorder,
+      itemBuilder: (_, i) => _sectionCard(_sections[i], i, key: ValueKey(_sections[i]['id'])),
     );
   }
 
@@ -169,13 +186,17 @@ class _SectionBuilderScreenState extends State<SectionBuilderScreen> {
   Widget _sectionCard(Map s, int index, {required Key key}) {
     final active = s['is_active'] == 1 || s['is_active'] == true;
     final type = s['section_type']?.toString() ?? '';
+    final selected = _formSection != null && _formSection!['id'] == s['id'];
     return Container(
       key: key,
       margin: EdgeInsets.only(bottom: 10.h),
       decoration: BoxDecoration(
         color: AppColors.surfaceColor,
         borderRadius: BorderRadius.circular(12.r),
-        border: Border.all(color: AppColors.borderColor),
+        border: Border.all(
+          color: selected ? AppColors.primaryColor : AppColors.borderColor,
+          width: selected ? 1.5 : 1,
+        ),
       ),
       child: ListTile(
         leading: Container(
@@ -199,7 +220,7 @@ class _SectionBuilderScreenState extends State<SectionBuilderScreen> {
           children: [
             Switch(
               value: active,
-              activeColor: AppColors.primaryColor,
+              activeThumbColor: AppColors.primaryColor,
               onChanged: (_) => _toggle(s['id'] as int),
             ),
             IconButton(
@@ -239,22 +260,30 @@ class _SectionBuilderScreenState extends State<SectionBuilderScreen> {
     return '$label · limit ${s['product_limit']}';
   }
 
-  // ── Add / Edit form (right side sheet) ──────────────────────────────────────
+  // ── Add / Edit form ─────────────────────────────────────────────────────────
+  // Wide screens: inline right panel (split). Narrow: a right side sheet overlay.
   void _openForm({Map? existing}) {
-    showAdminSideSheet(
-      context,
-      width: 480,
-      child: _SectionForm(
-        tabId: _tabId,
-        productTypes: _productTypes,
-        categories: _categories,
-        banners: _banners,
-        existing: existing,
-        onSaved: () { _load(); },
-        snack: _snack,
-      ),
-    );
+    if (MediaQuery.of(context).size.width >= 900) {
+      setState(() => _formSection = existing);
+    } else {
+      showAdminSideSheet(
+        context,
+        width: 480,
+        child: _SectionForm(
+          tabId: _tabId,
+          productTypes: _productTypes,
+          categories: _categories,
+          banners: _banners,
+          existing: existing,
+          onSaved: () { _load(); },
+          snack: _snack,
+        ),
+      );
+    }
   }
+
+  // In the always-visible split layout, "closing" just returns to Add mode.
+  void _closePanel() => setState(() => _formSection = null);
 }
 
 class _SectionForm extends StatefulWidget {
@@ -265,8 +294,10 @@ class _SectionForm extends StatefulWidget {
   final Map? existing;
   final VoidCallback onSaved;
   final void Function(String) snack;
+  final VoidCallback? onClose; // closes the panel / pops the sheet
 
   const _SectionForm({
+    super.key,
     required this.tabId,
     required this.productTypes,
     required this.categories,
@@ -274,6 +305,7 @@ class _SectionForm extends StatefulWidget {
     required this.onSaved,
     required this.snack,
     this.existing,
+    this.onClose,
   });
 
   @override
@@ -388,7 +420,7 @@ class _SectionFormState extends State<_SectionForm> {
       if (!mounted) return;
       if (data['success'] == true) {
         widget.onSaved();
-        Navigator.pop(context);
+        _close();
         widget.snack('Section saved');
       } else {
         widget.snack(data['message'] ?? 'Failed');
@@ -400,14 +432,17 @@ class _SectionFormState extends State<_SectionForm> {
     }
   }
 
+  void _close() => (widget.onClose ?? () => Navigator.pop(context))();
+
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.existing != null;
     return AdminSideSheet(
       title: isEdit ? 'Edit Section' : 'Add Section',
       subtitle: 'What shows in this part of the tab',
+      onClose: widget.onClose,
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: GoogleFonts.jost())),
+        TextButton(onPressed: _close, child: Text('Cancel', style: GoogleFonts.jost())),
         FilledButton(
           onPressed: _saving ? null : _save,
           style: FilledButton.styleFrom(backgroundColor: AppColors.primaryColor),

@@ -1,8 +1,8 @@
 class ApiConstants {
-  // static const String BASE_URL       = "http://192.168.1.5:8000/api";
-  // static const String BASE_IMAGE_URL = "http://192.168.1.5:8000/storage/";
-  static const String BASE_URL       = "http://localhost:8000/api";
-  static const String BASE_IMAGE_URL = "http://localhost:8000/storage/";
+  static const String BASE_URL       = "http://192.168.1.4:8000/api";
+  static const String BASE_IMAGE_URL = "http://192.168.1.4:8000/storage/";
+  // static const String BASE_URL       = "http://localhost:8000/api";
+  // static const String BASE_IMAGE_URL = "http://localhost:8000/storage/";
   // static const String BASE_URL       = "https://shopq.solarsunshakti.com/api";
   // static const String BASE_IMAGE_URL = "https://shopq.solarsunshakti.com/storage/";
 
@@ -35,6 +35,10 @@ class ApiConstants {
 
   // ── Dashboard ──────────────────────────────────────
   static const String VENDOR_DASHBOARD           = "$BASE_URL/vendor/dashboard";
+  static const String VENDOR_LOW_STOCK           = "$BASE_URL/vendor/products/low-stock";
+
+  // ── Payouts ────────────────────────────────────────
+  static const String VENDOR_PAYOUTS             = "$BASE_URL/vendor/payouts";
 
   // ── Orders ─────────────────────────────────────────
   static const String VENDOR_ORDERS               = "$BASE_URL/vendor/orders";

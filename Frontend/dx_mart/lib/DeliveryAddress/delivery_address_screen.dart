@@ -8,6 +8,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../utils/api_helper.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../CustomWidgets/skeletons.dart';
 import '../utils/api_constants.dart';
 import '../utils/colors.dart';
 
@@ -338,11 +339,7 @@ class _DeliveryAddressScreenState extends State<DeliveryAddressScreen> {
           // Address List
           Expanded(
             child: isLoading
-                ? Center(
-                    child: CircularProgressIndicator(
-                      color: AppColors.primaryColor,
-                    ),
-                  )
+                ? const SingleChildScrollView(child: ListRowsSkeleton(count: 5))
                 : addressList.isEmpty
                 ? Center(
                     child: Text(

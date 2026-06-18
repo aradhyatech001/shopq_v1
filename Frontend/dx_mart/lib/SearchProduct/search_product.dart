@@ -1,7 +1,6 @@
 import 'package:animated_text_kit/animated_text_kit.dart';
 import 'package:flutter/material.dart';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../utils/api_helper.dart';
@@ -9,6 +8,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 
 import '../BottomNav/Screens/cartScreen.dart';
 import '../CustomWidgets/product_card.dart';
+import '../CustomWidgets/skeletons.dart';
 import '../utils/api_constants.dart';
 import '../utils/colors.dart';
 
@@ -120,11 +120,10 @@ class _SearchProductState extends State<SearchProduct> {
       hasSearched = true;
     });
 
-    final url = Uri.parse(
+    final response = await ApiHelper.get(
       "${ApiConstants.VIEW_ALL_PRODUCTS}?search=$search&page=1&limit=20",
+      pincode: true,
     );
-
-    final response = await http.get(url);
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
@@ -250,7 +249,7 @@ class _SearchProductState extends State<SearchProduct> {
 
               if (isLoading)
                 const Expanded(
-                  child: Center(child: CircularProgressIndicator()),
+                  child: ProductGridSkeleton(count: 9, crossAxisCount: 3),
                 ),
             ],
           ),

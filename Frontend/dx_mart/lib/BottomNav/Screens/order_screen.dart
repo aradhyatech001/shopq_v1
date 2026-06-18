@@ -6,12 +6,14 @@ import 'package:intl/intl.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import '../../OrderSummary/order_summary.dart';
+import '../../Refunds/my_refunds_screen.dart';
 import '../../TrackOrder/track_order.dart';
 import '../../utils/api_constants.dart';
 import '../../utils/colors.dart';
 import '../../utils/order_status.dart';
 import '../bottomNavScreen.dart';
 import '../../utils/api_helper.dart';
+import '../../CustomWidgets/skeletons.dart';
 
 class OrderScreen extends StatefulWidget {
   const OrderScreen({super.key});
@@ -77,7 +79,7 @@ class _OrderScreenState extends State<OrderScreen>
 
   Future<void> fetchOrders(String userid, {bool silent = false}) async {
     try {
-      final response = await ApiHelper.post(ApiConstants.GET_ORDER_BY_USER, body: {"user_id": userId.toString()}, auth: true);
+      final response = await ApiHelper.post(ApiConstants.GET_ORDER_BY_USER, body: {}, auth: true);
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -279,13 +281,45 @@ class _OrderScreenState extends State<OrderScreen>
                     ),
                   ),
                   SizedBox(width: 16.w),
-                  Text(
-                    "My Order",
-                    style: GoogleFonts.jost(
-                      fontSize: 17.sp,
-                      fontWeight: FontWeight.w700,
+                  Expanded(
+                    child: Text(
+                      "My Order",
+                      style: GoogleFonts.jost(
+                        fontSize: 17.sp,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
+                  // My Refunds shortcut
+                  InkWell(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const MyRefundsScreen(),
+                      ),
+                    ),
+                    borderRadius: BorderRadius.circular(8.r),
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 4.h),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.receipt_long_rounded,
+                              size: 16.sp, color: AppColors.primaryColor),
+                          SizedBox(width: 4.w),
+                          Text(
+                            'Refunds',
+                            style: GoogleFonts.jost(
+                              fontSize: 11.sp,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primaryColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: 8.w),
                 ],
               ),
             ),
@@ -296,7 +330,7 @@ class _OrderScreenState extends State<OrderScreen>
           SizedBox(height: 8.h),
           Expanded(
             child: isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? const OrderListSkeleton()
                 : TabBarView(
                     controller: _tabController,
                     children: [
@@ -493,6 +527,34 @@ class _OrderScreenState extends State<OrderScreen>
                       ),
                     ],
                   ),
+                  // Cancel button — only for pending/confirmed orders
+                  if (status == 'pending' || status == 'confirmed') ...[
+                    SizedBox(height: 10.h),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: InkWell(
+                        onTap: () => _confirmCancel(orderId),
+                        child: Container(
+                          width: 120.w,
+                          height: 27.h,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.red.shade400),
+                            borderRadius: BorderRadius.circular(7.r),
+                          ),
+                          child: Center(
+                            child: Text(
+                              'Cancel Order',
+                              style: GoogleFonts.jost(
+                                fontSize: 11.sp,
+                                color: Colors.red.shade600,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -691,11 +753,122 @@ class _OrderScreenState extends State<OrderScreen>
                   ),
                 ),
               ),
+              SizedBox(width: 8.w),
+              // Refund request — for cancelled or delivered COD orders
+              if (status == 'cancelled' || status == 'delivered')
+                InkWell(
+                  onTap: () => _showRefundDialog(orderId),
+                  child: Container(
+                    width: 100.w,
+                    height: 27.h,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(7.r),
+                      border: Border.all(color: Colors.orange.shade400, width: 1.5.w),
+                    ),
+                    child: Center(
+                      child: Text(
+                        'Refund',
+                        style: GoogleFonts.jost(
+                          fontSize: 11.sp,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.orange.shade700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _confirmCancel(String orderId) async {
+    final id = int.tryParse(orderId);
+    if (id == null) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Cancel Order #$orderId', style: GoogleFonts.jost(fontWeight: FontWeight.w700)),
+        content: Text('Are you sure you want to cancel this order?', style: GoogleFonts.jost(fontSize: 14)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('No', style: GoogleFonts.jost())),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Yes, Cancel', style: GoogleFonts.jost()),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+
+    try {
+      final res = await ApiHelper.post(ApiConstants.cancelOrder(id), auth: true);
+      final data = jsonDecode(res.body);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(data['message'] ?? (data['success'] == true ? 'Order cancelled' : 'Failed')),
+        backgroundColor: data['success'] == true ? Colors.green : Colors.red,
+      ));
+      if (data['success'] == true) fetchOrders(userId, silent: true);
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Network error')));
+    }
+  }
+
+  Future<void> _showRefundDialog(String orderId) async {
+    final id = int.tryParse(orderId);
+    if (id == null) return;
+    final reasonCtrl = TextEditingController();
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Request Refund', style: GoogleFonts.jost(fontWeight: FontWeight.w700)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Tell us why you need a refund:', style: GoogleFonts.jost(fontSize: 14)),
+            SizedBox(height: 10),
+            TextField(
+              controller: reasonCtrl,
+              maxLines: 3,
+              decoration: InputDecoration(
+                hintText: 'Reason (optional)',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('Cancel', style: GoogleFonts.jost())),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Submit', style: GoogleFonts.jost()),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+
+    try {
+      final res = await ApiHelper.post(
+        ApiConstants.REQUEST_REFUND,
+        body: {'order_id': orderId, 'reason': reasonCtrl.text},
+        auth: true,
+      );
+      final data = jsonDecode(res.body);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(data['message'] ?? (data['success'] == true ? 'Refund requested' : 'Failed')),
+        backgroundColor: data['success'] == true ? Colors.green : Colors.red,
+      ));
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Network error')));
+    }
   }
 }
 

@@ -7,6 +7,8 @@ import '../utils/api_helper.dart';
 
 import '../BottomNav/Screens/cartScreen.dart';
 import '../CustomWidgets/product_card.dart';
+import '../CustomWidgets/skeletons.dart';
+import '../CustomWidgets/motion.dart';
 import '../SearchProduct/search_product.dart';
 import '../utils/api_constants.dart';
 import '../utils/colors.dart';
@@ -132,7 +134,7 @@ class _CategoryViewScreenState extends State<CategoryViewScreen> {
     if (subCategoryId != null) urlStr += '&subcategory_id=$subCategoryId';
 
     try {
-      final res = await http.get(Uri.parse(urlStr));
+      final res = await ApiHelper.get(urlStr, pincode: true);
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (mounted) {
@@ -313,10 +315,19 @@ class _CategoryViewScreenState extends State<CategoryViewScreen> {
                         ),
                       ),
                       child: _isLoadingSubcategories
-                          ? Center(
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppColors.primaryColor,
+                          ? Skeleton(
+                              child: ListView.separated(
+                                padding: EdgeInsets.all(10.w),
+                                physics: const NeverScrollableScrollPhysics(),
+                                itemCount: 8,
+                                separatorBuilder: (_, __) => SizedBox(height: 14.h),
+                                itemBuilder: (_, __) => Column(
+                                  children: [
+                                    SkeletonBox(width: 44.w, height: 44.w, radius: 10),
+                                    SizedBox(height: 6.h),
+                                    SkeletonBox(width: 40.w, height: 8.h),
+                                  ],
+                                ),
                               ),
                             )
                           : ListView.builder(
@@ -469,11 +480,7 @@ class _CategoryViewScreenState extends State<CategoryViewScreen> {
                     // ── RIGHT: Product grid ─────────────────────────
                     Expanded(
                       child: _isLoadingProducts
-                          ? Center(
-                              child: CircularProgressIndicator(
-                                color: AppColors.primaryColor,
-                              ),
-                            )
+                          ? const ProductGridSkeleton(count: 6, crossAxisCount: 2)
                           : products.isEmpty
                           ? Center(
                               child: Column(
@@ -516,13 +523,16 @@ class _CategoryViewScreenState extends State<CategoryViewScreen> {
                                     mainAxisSpacing: 8.h,
                                   ),
                               itemBuilder: (context, index) {
-                                return ProductCard(
-                                  product: products[index],
-                                  userId: userID,
-                                  onCartUpdated: () =>
-                                      fetchCartQuantity(userID),
-                                  onCategoryBack: () =>
-                                      setState(() => fetchCartQuantity(userID)),
+                                return FadeSlideIn(
+                                  offsetY: 16,
+                                  child: ProductCard(
+                                    product: products[index],
+                                    userId: userID,
+                                    onCartUpdated: () =>
+                                        fetchCartQuantity(userID),
+                                    onCategoryBack: () =>
+                                        setState(() => fetchCartQuantity(userID)),
+                                  ),
                                 );
                               },
                             ),

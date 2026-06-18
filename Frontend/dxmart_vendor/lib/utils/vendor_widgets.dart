@@ -43,6 +43,23 @@ class VendorPage extends StatelessWidget {
             ),
             child: Row(
               children: [
+                // Hamburger appears only when the surrounding Scaffold has a
+                // drawer (i.e. the mobile layout) so every screen is reachable.
+                Builder(builder: (ctx) {
+                  final s = Scaffold.maybeOf(ctx);
+                  if (s == null || !s.hasDrawer) return const SizedBox.shrink();
+                  return Padding(
+                    padding: EdgeInsets.only(right: 10.w),
+                    child: InkWell(
+                      onTap: s.openDrawer,
+                      borderRadius: BorderRadius.circular(8.r),
+                      child: Padding(
+                        padding: EdgeInsets.all(4.w),
+                        child: Icon(Icons.menu_rounded, size: 24.sp, color: AppColors.textPrimary),
+                      ),
+                    ),
+                  );
+                }),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -91,7 +108,7 @@ class VCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final card = Container(
-      padding: padding ?? EdgeInsets.all(16.w),
+      padding: padding ?? EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(14.r),
@@ -146,13 +163,13 @@ class StatCard extends StatelessWidget {
               const Spacer(),
             ],
           ),
-          SizedBox(height: 4.h),
+          SizedBox(height: 3.h),
           Text(value,
               style: GoogleFonts.jost(
                   fontSize: 22.sp,
                   fontWeight: FontWeight.w800,
                   color: AppColors.textPrimary)),
-          SizedBox(height: 2.h),
+          // SizedBox(height: 2.h),
           Text(label,
               style: GoogleFonts.jost(
                   fontSize: 12.sp, color: AppColors.textSecondary)),

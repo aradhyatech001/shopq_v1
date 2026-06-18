@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../CustomWidgets/product_card.dart';
+import '../../CustomWidgets/skeletons.dart';
 import '../../utils/api_constants.dart';
 import '../../utils/colors.dart';
 import '../bottomNavScreen.dart';
@@ -47,28 +47,20 @@ class _WishlistScreenState extends State<WishlistScreen> {
     }
   }
 
-  /// ✅ Cart quantity fetch
   Future<void> fetchCartQuantity(String id) async {
-    final url = Uri.parse('${ApiConstants.GET_CART_ITEMS}?user_id=$id');
     try {
-      final _authHeaders = await ApiHelper.getAuthHeaders();
-      final response = await http.get(url, headers: _authHeaders);
+      final response = await ApiHelper.get(
+        '${ApiConstants.GET_CART_ITEMS}?user_id=$id',
+        auth: true,
+      );
       final data = jsonDecode(response.body);
-
-      if (data['success']) {
-        final cartItems = List<Map<String, dynamic>>.from(data['cart'] ?? []);
-        setState(() {
-          cartList = cartItems;
-        });
-      } else {
-        setState(() {
-          cartList = [];
-        });
-      }
-    } catch (e) {
       setState(() {
-        cartList = [];
+        cartList = data['success'] == true
+            ? List<Map<String, dynamic>>.from(data['cart'] ?? [])
+            : [];
       });
+    } catch (e) {
+      setState(() { cartList = []; });
     }
   }
 
@@ -80,44 +72,21 @@ class _WishlistScreenState extends State<WishlistScreen> {
     });
 
     try {
-      final url = Uri.parse('${ApiConstants.GET_WISHLIST}?user_id=$userID');
-      final _authHeaders = await ApiHelper.getAuthHeaders();
-      final response = await http.get(url, headers: _authHeaders);
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-
-        if (data['success'] == true) {
-          if (data['products'] != null && data['products'].isNotEmpty) {
-            setState(() {
-              wishlistProducts = List<Map<String, dynamic>>.from(
-                data['products'],
-              );
-            });
-          } else {
-            setState(() {
-              wishlistProducts = [];
-            });
-          }
-        } else {
-          setState(() {
-            wishlistProducts = [];
-          });
-        }
-      } else {
-        setState(() {
-          wishlistProducts = [];
-        });
-      }
+      final response = await ApiHelper.get(
+        '${ApiConstants.GET_WISHLIST}?user_id=$userID',
+        auth: true,
+      );
+      final data = jsonDecode(response.body);
+      setState(() {
+        wishlistProducts = (data['success'] == true && data['products'] != null)
+            ? List<Map<String, dynamic>>.from(data['products'])
+            : [];
+      });
     } catch (e) {
       debugPrint('Error fetching wishlist: $e');
-      setState(() {
-        wishlistProducts = [];
-      });
+      setState(() { wishlistProducts = []; });
     } finally {
-      setState(() {
-        isLoading = false;
-      });
+      setState(() { isLoading = false; });
     }
   }
 
@@ -181,7 +150,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
               : RefreshIndicator(
                   onRefresh: _refreshWishlist,
                   child: isLoading
-                      ? Center(child: CircularProgressIndicator())
+                      ? const ProductGridSkeleton(count: 6, crossAxisCount: 3)
                       : wishlistProducts.isEmpty
                       ? Center(
                           child: Column(

@@ -293,9 +293,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   style: GoogleFonts.jost(fontSize: 11.sp, color: AppColors.hint)),
             Divider(height: 16.h, color: AppColors.dividerColor),
             Row(children: [
-              Text('Total', style: GoogleFonts.jost(fontSize: 13.sp, color: AppColors.textSecondary)),
+              Text('You collect', style: GoogleFonts.jost(fontSize: 13.sp, color: AppColors.textSecondary)),
               const Spacer(),
-              Text('₹${money(_num(o['total']))}',
+              Text('₹${money(_num(o['collect_amount'] ?? o['total']))}',
                   style: GoogleFonts.jost(fontSize: 15.sp, fontWeight: FontWeight.w800, color: AppColors.primary)),
             ]),
           ],
@@ -356,14 +356,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
           ...items.map((it) => _detailItem(it)),
 
           SizedBox(height: 6.h),
-          VCard(
-            child: Row(children: [
-              Text('Total', style: GoogleFonts.jost(fontSize: 14.sp, fontWeight: FontWeight.w700)),
-              const Spacer(),
-              Text('₹${money(_num(o['total']))}',
-                  style: GoogleFonts.jost(fontSize: 16.sp, fontWeight: FontWeight.w800, color: AppColors.primary)),
-            ]),
-          ),
+          _settlementCard(o),
 
           SizedBox(height: 18.h),
           if (next != null) ...[
@@ -397,6 +390,65 @@ class _OrdersScreenState extends State<OrdersScreen> {
           SizedBox(height: 20.h),
         ],
       ),
+    );
+  }
+
+  // Frozen settlement breakdown — read-only, never recomputed in the app.
+  Widget _settlementCard(Map o) {
+    final goods    = _num(o['goods_subtotal']);
+    final coupon   = _num(o['coupon_share']);
+    final delivery = _num(o['delivery_share']);
+    final handling = _num(o['handling_share']);
+    final collect  = _num(o['collect_amount'] ?? o['total']);
+    final couponMap = o['coupon'] as Map?;
+    final payMethod = (o['payment_method'] ?? 'COD').toString().toUpperCase();
+    final payStatus = (o['payment_status'] ?? 'pending').toString();
+    final paid = payStatus.toLowerCase() == 'paid';
+
+    Widget line(String label, String value, {Color? color, bool bold = false}) => Padding(
+          padding: EdgeInsets.symmetric(vertical: 3.h),
+          child: Row(children: [
+            Text(label, style: GoogleFonts.jost(fontSize: 13.sp, color: AppColors.textSecondary)),
+            const Spacer(),
+            Text(value,
+                style: GoogleFonts.jost(
+                    fontSize: bold ? 16.sp : 13.sp,
+                    fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+                    color: color ?? AppColors.textPrimary)),
+          ]),
+        );
+
+    return VCard(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('Settlement', style: GoogleFonts.jost(fontSize: 13.sp, fontWeight: FontWeight.w800)),
+        SizedBox(height: 4.h),
+        line('Product subtotal', '₹${money(goods)}'),
+        if (coupon > 0) line('Coupon discount', '− ₹${money(coupon)}', color: AppColors.success),
+        if (delivery > 0) line('Delivery share', '+ ₹${money(delivery)}'),
+        if (handling > 0) line('Handling share', '+ ₹${money(handling)}'),
+        Divider(height: 14.h, color: AppColors.dividerColor),
+        line('You collect', '₹${money(collect)}', color: AppColors.primary, bold: true),
+        SizedBox(height: 8.h),
+        Row(children: [
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
+            decoration: BoxDecoration(
+                color: paid ? AppColors.success.withValues(alpha: 0.12) : AppColors.primaryLight,
+                borderRadius: BorderRadius.circular(6.r)),
+            child: Text(paid ? '$payMethod · PAID' : payMethod,
+                style: GoogleFonts.jost(fontSize: 11.sp, fontWeight: FontWeight.w700,
+                    color: paid ? AppColors.success : AppColors.primary)),
+          ),
+          if (couponMap != null) ...[
+            SizedBox(width: 8.w),
+            Expanded(
+              child: Text('Coupon ${couponMap['code']}',
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.jost(fontSize: 11.sp, color: AppColors.textSecondary)),
+            ),
+          ],
+        ]),
+      ]),
     );
   }
 

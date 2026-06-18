@@ -67,7 +67,56 @@ class _OrdersScreenState extends State<OrdersScreen> {
       .where((o) => OrderStatus.isComplete(o['status']) == _showCompleted)
       .toList();
 
-  Future<void> _setStatus(dynamic id, String status) async {
+  Future<void> _confirmCod(dynamic id, double codAmount) async {
+    try {
+      final res = await ApiHelper.postJson(
+        ApiConstants.CONFIRM_COD,
+        body: {'vendor_order_id': id, 'cod_collected_amount': codAmount},
+      );
+      final data = jsonDecode(res.body);
+      if (data['success'] != true) _toast(data['message'] ?? 'COD confirmation failed');
+    } catch (_) {}
+  }
+
+  // Shows a cash-collection dialog before marking COD orders as delivered.
+  // Returns true if the rider confirmed (or it's not COD). Cancelling returns false.
+  Future<bool> _askCodConfirm(Map o) async {
+    final method = (o['payment_method'] ?? 'COD').toString().toUpperCase();
+    final cod = double.tryParse('${o['cod_collect'] ?? 0}') ?? 0;
+    if (method != 'COD' || cod <= 0) return true; // not COD — skip dialog
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Confirm cash collection', style: GoogleFonts.jost(fontWeight: FontWeight.w700)),
+        content: Text(
+          'Did you collect ₹${cod.toStringAsFixed(0)} in cash from the customer?',
+          style: GoogleFonts.jost(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('No', style: GoogleFonts.jost(color: Colors.red)),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Yes, collected', style: GoogleFonts.jost()),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
+  Future<void> _setStatus(dynamic id, String status, {Map? order}) async {
+    // For COD delivery confirmation, ask before marking delivered.
+    if (status == 'delivered' && order != null) {
+      final ok = await _askCodConfirm(order);
+      if (!ok) return;
+      // Record COD collection in parallel (fire and forget error handling).
+      final cod = double.tryParse('${order['cod_collect'] ?? 0}') ?? 0;
+      if (cod > 0) _confirmCod(id, cod); // fire-and-forget: COD record, non-blocking
+    }
     try {
       final res = await ApiHelper.postJson(
         ApiConstants.UPDATE_STATUS,
@@ -111,15 +160,46 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
   double _num(v) => double.tryParse('${v ?? 0}') ?? 0;
 
-  /// Full product row so the rider knows exactly what to hand over.
+  /// The one money figure a rider sees: cash to collect at the door.
+  /// COD → the frozen vendor-order collect amount. Prepaid/online → ₹0.
+  Widget _collectBox(Map o) {
+    final method = (o['payment_method'] ?? 'COD').toString().toUpperCase();
+    final isCod = method == 'COD';
+    final cod = _num(o['cod_collect']);
+    final prepaid = !isCod || cod == 0;
+
+    return Container(
+      padding: EdgeInsets.all(14.w),
+      decoration: BoxDecoration(
+        color: prepaid ? AppColors.success.withValues(alpha: 0.10) : AppColors.primaryLight,
+        borderRadius: BorderRadius.circular(12.r),
+        border: Border.all(color: prepaid ? AppColors.success : AppColors.primary, width: 1.2),
+      ),
+      child: Row(children: [
+        Icon(prepaid ? Icons.verified_rounded : Icons.payments_rounded,
+            size: 22.sp, color: prepaid ? AppColors.success : AppColors.primary),
+        SizedBox(width: 10.w),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(prepaid ? 'Prepaid — collect nothing' : 'Collect from customer',
+                style: GoogleFonts.jost(fontSize: 12.sp, color: AppColors.textSecondary)),
+            Text(prepaid ? '$method · PAID' : '$method',
+                style: GoogleFonts.jost(fontSize: 11.sp, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+          ]),
+        ),
+        Text(prepaid ? '₹0' : '₹${cod.toStringAsFixed(0)}',
+            style: GoogleFonts.jost(
+                fontSize: 20.sp, fontWeight: FontWeight.w800,
+                color: prepaid ? AppColors.success : AppColors.primary)),
+      ]),
+    );
+  }
+
+  /// Pickup checklist row — product + quantity only. A rider never sees
+  /// pricing, discounts, or settlement detail (only the COD collect figure).
   Widget _item(Map it) {
     final img = ApiConstants.imageUrl(it['image']?.toString() ?? '');
     final qty = _num(it['quantity']).toInt();
-    final unit = _num(it['price']);
-    final mrp = _num(it['mrp']);
-    final disc = _num(it['discount']).toInt();
-    final lineTotal = _num(it['line_total']) > 0 ? _num(it['line_total']) : unit * qty;
-    final hasDisc = mrp > unit && mrp > 0;
     final variant = (it['variant_name'] ?? '').toString();
 
     return Container(
@@ -131,7 +211,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
         border: Border.all(color: AppColors.borderColor),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(8.r),
@@ -154,35 +233,15 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     style: GoogleFonts.jost(fontSize: 13.sp, fontWeight: FontWeight.w600)),
                 if (variant.isNotEmpty)
                   Text(variant, style: GoogleFonts.jost(fontSize: 11.sp, color: AppColors.textSecondary)),
-                SizedBox(height: 3.h),
-                Row(children: [
-                  Text('₹${unit.toStringAsFixed(0)}',
-                      style: GoogleFonts.jost(fontSize: 13.sp, fontWeight: FontWeight.w700, color: AppColors.primary)),
-                  if (hasDisc) ...[
-                    SizedBox(width: 6.w),
-                    Text('₹${mrp.toStringAsFixed(0)}',
-                        style: GoogleFonts.jost(fontSize: 11.sp, color: AppColors.hint, decoration: TextDecoration.lineThrough)),
-                    SizedBox(width: 6.w),
-                    Text('$disc% off',
-                        style: GoogleFonts.jost(fontSize: 10.sp, fontWeight: FontWeight.w700, color: AppColors.success)),
-                  ],
-                ]),
               ],
             ),
           ),
           SizedBox(width: 8.w),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
-                decoration: BoxDecoration(color: AppColors.primaryLight, borderRadius: BorderRadius.circular(6.r)),
-                child: Text('Qty $qty',
-                    style: GoogleFonts.jost(fontSize: 11.sp, fontWeight: FontWeight.w700, color: AppColors.primary)),
-              ),
-              SizedBox(height: 4.h),
-              Text('₹${lineTotal.toStringAsFixed(0)}', style: GoogleFonts.jost(fontSize: 13.sp, fontWeight: FontWeight.w700)),
-            ],
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
+            decoration: BoxDecoration(color: AppColors.primaryLight, borderRadius: BorderRadius.circular(6.r)),
+            child: Text('Qty $qty',
+                style: GoogleFonts.jost(fontSize: 11.sp, fontWeight: FontWeight.w700, color: AppColors.primary)),
           ),
         ],
       ),
@@ -388,13 +447,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     style: GoogleFonts.jost(fontSize: 12.sp, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
                 SizedBox(height: 8.h),
                 ...items.map((it) => _item(it)),
-                Divider(height: 16.h, color: AppColors.dividerColor),
-                Row(children: [
-                  Text('Order value', style: GoogleFonts.jost(fontSize: 13.sp, color: AppColors.textSecondary)),
-                  const Spacer(),
-                  Text('₹${_num(o['total']).toStringAsFixed(0)}',
-                      style: GoogleFonts.jost(fontSize: 15.sp, fontWeight: FontWeight.w800)),
-                ]),
+                SizedBox(height: 12.h),
+                _collectBox(o),
                 SizedBox(height: 18.h),
                 if (next != null)
                   SizedBox(
@@ -406,7 +460,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       ),
                       onPressed: () async {
                         Navigator.pop(ctx);
-                        await _setStatus(o['id'], next['to']!);
+                        await _setStatus(o['id'], next['to']!, order: o);
                       },
                       child: Text(next['label']!,
                           style: GoogleFonts.jost(fontSize: 14.sp, fontWeight: FontWeight.w700, color: Colors.white)),

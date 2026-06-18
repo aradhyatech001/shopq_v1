@@ -34,6 +34,10 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
   // Selected order for detail panel
   Map<String, dynamic>? _selected;
 
+  // Settlement data for the selected order (lazy-loaded)
+  Map<String, dynamic>? _settlement;
+  bool _loadingSettlement = false;
+
   DateTime? _startDate;
   DateTime? _endDate;
   final _searchCtrl = TextEditingController();
@@ -196,6 +200,25 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
       _page++;
     });
     await _fetchOrders();
+  }
+
+  Future<void> _fetchSettlement(int orderId) async {
+    setState(() {
+      _settlement = null;
+      _loadingSettlement = true;
+    });
+    try {
+      final res = await AdminApi.get(
+        Uri.parse(ApiConstants.orderSettlement(orderId)),
+      );
+      final data = jsonDecode(res.body);
+      if (data['success'] == true && mounted) {
+        setState(() => _settlement = data);
+      }
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _loadingSettlement = false);
+    }
   }
 
   Future<void> _updateStatus(int orderId, String newStatus) async {
@@ -806,7 +829,10 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
               _selected!['order']['id'].toString() == order['id'].toString();
 
           return GestureDetector(
-            onTap: () => setState(() => _selected = od),
+            onTap: () {
+              setState(() => _selected = od);
+              _fetchSettlement(int.tryParse(order['id'].toString()) ?? 0);
+            },
             child: Container(
               padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 12.h),
               decoration: BoxDecoration(
@@ -1107,6 +1133,13 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
                   _panelSectionTitle('ITEMS (${items.length})'),
                   SizedBox(height: 10.h),
                   ...items.map((item) => _buildItemCard(item)),
+
+                  SizedBox(height: 16.h),
+
+                  // ── Settlement breakdown ──────────────────
+                  _panelSectionTitle('SETTLEMENT'),
+                  SizedBox(height: 10.h),
+                  _buildSettlementSection(),
                 ],
               ),
             ),
@@ -1115,6 +1148,181 @@ class _OrderManagementScreenState extends State<OrderManagementScreen> {
       ),
     );
   }
+
+  // ── Settlement section ────────────────────────────────────
+  Widget _buildSettlementSection() {
+    if (_loadingSettlement) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_settlement == null) {
+      return Container(
+        padding: EdgeInsets.all(14.w),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceColor,
+          borderRadius: BorderRadius.circular(12.r),
+          border: Border.all(color: AppColors.borderColor),
+        ),
+        child: Text(
+          'Settlement data unavailable.',
+          style: GoogleFonts.jost(
+            fontSize: 12.sp,
+            color: AppColors.hintTextColor,
+          ),
+        ),
+      );
+    }
+
+    final summary = _settlement!['summary'] as Map<String, dynamic>? ?? {};
+    final vendors = (_settlement!['vendors'] as List?) ?? [];
+    final platform = _settlement!['platform'] as Map<String, dynamic>? ?? {};
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Summary card ─────────────────────────────
+        Container(
+          padding: EdgeInsets.all(14.w),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceColor,
+            borderRadius: BorderRadius.circular(12.r),
+            border: Border.all(color: AppColors.borderColor),
+          ),
+          child: Column(
+            children: [
+              _infoRow('Cart Total', '₹${summary['total_amount'] ?? 0}'),
+              if ((summary['coupon_discount'] as num? ?? 0) > 0)
+                _infoRow(
+                  'Coupon (${summary['coupon_code'] ?? ''})',
+                  '-₹${summary['coupon_discount']}',
+                  valueColor: AppColors.successColor,
+                ),
+              _infoRow('Delivery', '₹${summary['delivery_charge'] ?? 0}'),
+              _infoRow('Handling', '₹${summary['handling_charge'] ?? 0}'),
+              Divider(height: 14.h, color: AppColors.borderColor),
+              _infoRow(
+                'Final Amount',
+                '₹${summary['final_amount'] ?? 0}',
+                valueColor: AppColors.primaryColor,
+              ),
+              _infoRow('Payment', summary['payment_method']?.toString() ?? '—'),
+              _infoRow('Pay Status', summary['payment_status']?.toString() ?? '—'),
+            ],
+          ),
+        ),
+
+        SizedBox(height: 10.h),
+
+        // ── Platform totals ───────────────────────────
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: 14.w, vertical: 10.h),
+          decoration: BoxDecoration(
+            color: AppColors.primaryLight,
+            borderRadius: BorderRadius.circular(10.r),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Platform Commission',
+                style: GoogleFonts.jost(
+                  fontSize: 12.sp,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primaryColor,
+                ),
+              ),
+              Text(
+                '₹${(platform['total_commission'] as num? ?? 0).toStringAsFixed(2)}',
+                style: GoogleFonts.jost(
+                  fontSize: 13.sp,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.primaryColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        SizedBox(height: 10.h),
+
+        // ── Per-vendor breakdown ──────────────────────
+        if (vendors.isNotEmpty) ...[
+          Text(
+            'VENDOR BREAKDOWN',
+            style: GoogleFonts.jost(
+              fontSize: 10.sp,
+              fontWeight: FontWeight.w700,
+              color: AppColors.secondaryTextColor,
+              letterSpacing: 1,
+            ),
+          ),
+          SizedBox(height: 8.h),
+          ...vendors.map((v) => _buildVendorSettlementCard(v as Map)),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildVendorSettlementCard(Map v) => Container(
+    margin: EdgeInsets.only(bottom: 8.h),
+    padding: EdgeInsets.all(12.w),
+    decoration: BoxDecoration(
+      color: AppColors.surfaceColor,
+      borderRadius: BorderRadius.circular(10.r),
+      border: Border.all(color: AppColors.borderColor),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                v['vendor_name']?.toString() ?? 'Vendor #${v['vendor_id']}',
+                style: GoogleFonts.jost(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13.sp,
+                ),
+              ),
+            ),
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
+              decoration: BoxDecoration(
+                color: v['payout_id'] != null
+                    ? AppColors.successLight
+                    : AppColors.warningLight,
+                borderRadius: BorderRadius.circular(6.r),
+              ),
+              child: Text(
+                v['payout_id'] != null ? 'Paid out' : 'Unpaid',
+                style: GoogleFonts.jost(
+                  fontSize: 10.sp,
+                  fontWeight: FontWeight.w600,
+                  color: v['payout_id'] != null
+                      ? AppColors.successColor
+                      : AppColors.warningColor,
+                ),
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: 6.h),
+        _infoRow('Items Subtotal', '₹${v['items_subtotal'] ?? 0}'),
+        _infoRow('Coupon Share', '-₹${v['coupon_share'] ?? 0}'),
+        _infoRow('Commission', '-₹${v['commission_amount'] ?? 0}'),
+        Divider(height: 10.h, color: AppColors.borderColor),
+        _infoRow(
+          'Vendor Earns',
+          '₹${(v['vendor_earning'] as num? ?? 0).toStringAsFixed(2)}',
+          valueColor: AppColors.successColor,
+        ),
+        if (v['cod_collected'] != null && (v['cod_collected'] as num) > 0)
+          _infoRow('COD Collected', '₹${v['cod_collected']}'),
+      ],
+    ),
+  );
 
   Widget _panelSection(String title, List<Widget> rows) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,

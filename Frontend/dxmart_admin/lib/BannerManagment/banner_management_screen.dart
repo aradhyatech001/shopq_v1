@@ -1,4 +1,4 @@
-import 'dart:typed_data';
+﻿import 'dart:typed_data';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -18,7 +18,7 @@ class BannerManagementScreen extends StatefulWidget {
 }
 
 class _BannerManagementScreenState extends State<BannerManagementScreen> {
-  // ── State ────────────────────────────────────────────────
+  // â”€â”€ State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   List _banners = [];
   List _categories = [];
   bool _loading = true;
@@ -27,6 +27,7 @@ class _BannerManagementScreenState extends State<BannerManagementScreen> {
   String? _selectedCatId;
   Uint8List? _imageBytes;
   String? _imageFileName;
+  Map? _editingBanner; // null = the panel is in "Add" mode
 
   @override
   void initState() {
@@ -59,30 +60,44 @@ class _BannerManagementScreenState extends State<BannerManagementScreen> {
     } catch (_) {}
   }
 
-  Future<void> _addBanner() async {
+  // Loads a banner into the right panel for editing (no separate sheet).
+  void _startEdit(Map banner) {
+    final catIds = _categories.map((c) => c['id'].toString()).toList();
+    final raw = banner['category_id']?.toString();
+    setState(() {
+      _editingBanner = Map<String, dynamic>.from(banner);
+      _selectedCatId = catIds.contains(raw) ? raw : null;
+      _imageBytes = null;
+      _imageFileName = null;
+    });
+  }
+
+  // Add (no editing banner) or update (editing) â€” one panel does both.
+  Future<void> _saveBanner() async {
+    final editing = _editingBanner != null;
     if (_selectedCatId == null) {
       _snack('Select a category', AppColors.warningColor);
       return;
     }
-    if (_imageBytes == null) {
+    if (!editing && _imageBytes == null) {
       _snack('Select a banner image', AppColors.warningColor);
       return;
     }
     setState(() => _saving = true);
     try {
+      final body = <String, String>{'category_id': _selectedCatId!};
+      if (editing) body['id'] = _editingBanner!['id'].toString();
+      if (_imageBytes != null) {
+        body['data'] = base64Encode(_imageBytes!);
+        body['name'] = _imageFileName ?? 'banner_${DateTime.now().millisecondsSinceEpoch}.png';
+      }
       final res = await AdminApi.post(
-        Uri.parse(ApiConstants.ADD_BANNER),
-        body: {
-          'category_id': _selectedCatId!,
-          'data': base64Encode(_imageBytes!),
-          'name':
-              _imageFileName ??
-              'banner_${DateTime.now().millisecondsSinceEpoch}.png',
-        },
+        Uri.parse(editing ? ApiConstants.EDIT_BANNER : ApiConstants.ADD_BANNER),
+        body: body,
       );
       final data = jsonDecode(res.body);
       if (data['success'] == 'true' || data['success'] == true) {
-        _snack('Banner added!', AppColors.successColor);
+        _snack(editing ? 'Banner updated!' : 'Banner added!', AppColors.successColor);
         _resetForm();
         _loadAll();
       } else {
@@ -130,149 +145,6 @@ class _BannerManagementScreenState extends State<BannerManagementScreen> {
     }
   }
 
-  void _showEditDialog(Map<String, dynamic> banner) {
-    final catIds = _categories.map((c) => c['id'].toString()).toList();
-    final rawCatId = banner['category_id']?.toString();
-    String? editCatId = catIds.contains(rawCatId) ? rawCatId : null;
-    final currentImage = (banner['banner_image'] ?? '').toString();
-    Uint8List? editBytes;
-    String? editFileName;
-    bool saving = false;
-
-    showAdminSideSheet(
-      context,
-      barrierDismissible: false,
-      child: StatefulBuilder(
-        builder: (ctx, setS) => AdminSideSheet(
-          title: 'Edit Banner',
-          child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Preview
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10.r),
-                  child: editBytes != null
-                      ? Image.memory(
-                          editBytes!,
-                          height: 120.h,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                        )
-                      : currentImage.isEmpty
-                      // Image.network('') throws synchronously on web and the
-                      // whole dialog fails to render — guard it with a placeholder.
-                      ? Container(
-                          height: 120.h,
-                          width: double.infinity,
-                          color: AppColors.backgroundColor,
-                          child: const Icon(
-                            Icons.image,
-                            color: AppColors.hintTextColor,
-                          ),
-                        )
-                      : Image.network(
-                          currentImage,
-                          height: 120.h,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Container(
-                            height: 120.h,
-                            color: AppColors.backgroundColor,
-                            child: const Icon(
-                              Icons.image,
-                              color: AppColors.hintTextColor,
-                            ),
-                          ),
-                        ),
-                ),
-                SizedBox(height: 10.h),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final bytes = await ImagePickerWeb.getImageAsBytes();
-                    if (bytes == null) return;
-                    if (bytes.lengthInBytes > 204800) {
-                      _snack('Max 200 KB', AppColors.warningColor);
-                      return;
-                    }
-                    setS(() {
-                      editBytes = bytes;
-                      editFileName =
-                          'banner_${DateTime.now().millisecondsSinceEpoch}.png';
-                    });
-                  },
-                  icon: const Icon(Icons.image_outlined),
-                  label: Text(
-                    'Change Image',
-                    style: GoogleFonts.jost(fontSize: 13.sp),
-                  ),
-                ),
-                SizedBox(height: 14.h),
-                const FormLabel('Category'),
-                _categoryDropdown(
-                  value: editCatId,
-                  onChanged: (v) => setS(() => editCatId = v),
-                ),
-              ],
-            ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text('Cancel', style: GoogleFonts.jost()),
-            ),
-            ElevatedButton(
-              onPressed: saving
-                  ? null
-                  : () async {
-                      setS(() => saving = true);
-                      try {
-                        final body = <String, String>{
-                          'id': banner['id'].toString(),
-                          'category_id':
-                              editCatId ?? banner['category_id'].toString(),
-                        };
-                        if (editBytes != null && editFileName != null) {
-                          body['data'] = base64Encode(editBytes!);
-                          body['name'] = editFileName!;
-                        }
-                        final res = await AdminApi.post(
-                          Uri.parse(ApiConstants.EDIT_BANNER),
-                          body: body,
-                        );
-                        final data = jsonDecode(res.body);
-                        if (data['success'] == true) {
-                          if (ctx.mounted) Navigator.pop(ctx);
-                          _snack('Updated!', AppColors.successColor);
-                          _loadAll();
-                        } else {
-                          _snack(
-                            data['message'] ?? 'Failed',
-                            AppColors.errorColor,
-                          );
-                        }
-                      } catch (e) {
-                        _snack('Error: $e', AppColors.errorColor);
-                      } finally {
-                        setS(() => saving = false);
-                      }
-                    },
-              child: saving
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : Text('Save', style: GoogleFonts.jost(color: Colors.white)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Future<void> _pickImage() async {
     final bytes = await ImagePickerWeb.getImageAsBytes();
     if (bytes == null) return;
@@ -287,6 +159,7 @@ class _BannerManagementScreenState extends State<BannerManagementScreen> {
   }
 
   void _resetForm() => setState(() {
+    _editingBanner = null;
     _selectedCatId = null;
     _imageBytes = null;
     _imageFileName = null;
@@ -302,7 +175,7 @@ class _BannerManagementScreenState extends State<BannerManagementScreen> {
     );
   }
 
-  // ── Build ─────────────────────────────────────────────────
+  // â”€â”€ Build â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   @override
   Widget build(BuildContext context) {
     return AdminPageShell(
@@ -323,7 +196,7 @@ class _BannerManagementScreenState extends State<BannerManagementScreen> {
           : Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ── Left: banner list ──────────────────────
+                // â”€â”€ Left: banner list â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 Expanded(
                   flex: 3,
                   child: _banners.isEmpty
@@ -339,7 +212,7 @@ class _BannerManagementScreenState extends State<BannerManagementScreen> {
                           itemBuilder: (_, i) => _BannerTile(
                             banner: _banners[i],
                             onToggle: () => _toggleBanner(_banners[i]),
-                            onEdit: () => _showEditDialog(_banners[i]),
+                            onEdit: () => _startEdit(_banners[i]),
                             onDelete: () =>
                                 _deleteBanner(_banners[i]['id'].toString()),
                           ),
@@ -348,7 +221,7 @@ class _BannerManagementScreenState extends State<BannerManagementScreen> {
 
                 const VerticalDivider(width: 1),
 
-                // ── Right: add form ────────────────────────
+                // â”€â”€ Right: add form â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                 SizedBox(
                   width: 320.w,
                   child: SingleChildScrollView(
@@ -362,8 +235,10 @@ class _BannerManagementScreenState extends State<BannerManagementScreen> {
   }
 
   Widget _buildForm() {
+    final editing = _editingBanner != null;
+    final currentImage = (_editingBanner?['banner_image'] ?? '').toString();
     return SectionCard(
-      title: 'Add Banner',
+      title: editing ? 'Edit Banner' : 'Add Banner',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -376,14 +251,40 @@ class _BannerManagementScreenState extends State<BannerManagementScreen> {
 
           const FormLabel('Banner Image', required: true),
           Text(
-            '300×150 recommended · Max 200 KB',
+            '300Ã—150 recommended Â· Max 200 KB',
             style: GoogleFonts.jost(
               fontSize: 11.sp,
               color: AppColors.hintTextColor,
             ),
           ),
           SizedBox(height: 8.h),
-          ImagePickerTile(bytes: _imageBytes, onTap: _pickImage, height: 140),
+          // New pick wins; else current banner image (edit); else empty picker.
+          if (_imageBytes == null && editing && currentImage.isNotEmpty)
+            GestureDetector(
+              onTap: _pickImage,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12.r),
+                child: Image.network(
+                  currentImage,
+                  height: 140.h,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    height: 140.h,
+                    color: AppColors.backgroundColor,
+                    child: const Icon(Icons.image, color: AppColors.hintTextColor),
+                  ),
+                ),
+              ),
+            )
+          else
+            ImagePickerTile(bytes: _imageBytes, onTap: _pickImage, height: 140),
+          if (editing)
+            Padding(
+              padding: EdgeInsets.only(top: 6.h),
+              child: Text('Tap the image to change it',
+                  style: GoogleFonts.jost(fontSize: 11.sp, color: AppColors.hintTextColor)),
+            ),
           SizedBox(height: 20.h),
 
           Row(
@@ -392,9 +293,9 @@ class _BannerManagementScreenState extends State<BannerManagementScreen> {
                 child: _saving
                     ? const Center(child: CircularProgressIndicator())
                     : ElevatedButton(
-                        onPressed: _addBanner,
+                        onPressed: _saveBanner,
                         child: Text(
-                          'Add Banner',
+                          editing ? 'Save' : 'Add Banner',
                           style: GoogleFonts.jost(fontWeight: FontWeight.w600),
                         ),
                       ),
@@ -402,7 +303,7 @@ class _BannerManagementScreenState extends State<BannerManagementScreen> {
               SizedBox(width: 10.w),
               OutlinedButton(
                 onPressed: _resetForm,
-                child: Text('Reset', style: GoogleFonts.jost()),
+                child: Text(editing ? 'Cancel' : 'Reset', style: GoogleFonts.jost()),
               ),
             ],
           ),
@@ -462,7 +363,7 @@ class _BannerManagementScreenState extends State<BannerManagementScreen> {
   }
 }
 
-// ── Banner tile ───────────────────────────────────────────────────────────────
+// â”€â”€ Banner tile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class _BannerTile extends StatelessWidget {
   final Map<String, dynamic> banner;
   final VoidCallback onToggle;

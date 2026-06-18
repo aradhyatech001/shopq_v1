@@ -1,8 +1,8 @@
 class ApiConstants {
-  // static const String BASE_URL = "http://192.168.1.5:8000/api";
-  // static const String BASE_IMAGE_URL = "http://192.168.1.5:8000/storage/";
-  static const String BASE_URL = "http://localhost:8000/api";
-  static const String BASE_IMAGE_URL = "http://localhost:8000/storage/";
+  static const String BASE_URL = "http://192.168.1.4:8000/api";
+  static const String BASE_IMAGE_URL = "http://192.168.1.4:8000/storage/";
+  // static const String BASE_URL = "http://localhost:8000/api";
+  // static const String BASE_IMAGE_URL = "http://localhost:8000/storage/";
   // static const String BASE_URL = "https://shopq.solarsunshakti.com/api";
   // static const String BASE_IMAGE_URL = "https://shopq.solarsunshakti.com/storage/";
 
@@ -75,7 +75,22 @@ class ApiConstants {
   static const String DELETE_COUPON = "$BASE_URL/coupons/delete";
   static const String VIEW_COUPON = "$BASE_URL/admin/coupons";
 
+  // ── Refunds ────────────────────────────────────────
+  static const String ADMIN_REFUNDS         = "$BASE_URL/admin/refunds";
+  static const String ADMIN_REFUNDS_APPROVE = "$BASE_URL/admin/refunds/approve";
+  static const String ADMIN_REFUNDS_REJECT  = "$BASE_URL/admin/refunds/reject";
+
+  // ── Payouts ────────────────────────────────────────
+  static const String ADMIN_PAYOUTS            = "$BASE_URL/admin/payouts";
+  static const String ADMIN_PAYOUTS_PENDING    = "$BASE_URL/admin/payouts/pending-earnings";
+  static const String ADMIN_PAYOUTS_CREATE     = "$BASE_URL/admin/payouts/create";
+  static const String ADMIN_PAYOUTS_MARK_PAID  = "$BASE_URL/admin/payouts/mark-paid";
+
+  // ── Low Stock ─────────────────────────────────────
+  static const String ADMIN_LOW_STOCK = "$BASE_URL/admin/products/low-stock";
+
   // ── Orders ────────────────────────────────────────
+  static String orderSettlement(int id) => "$BASE_URL/orders/$id/settlement";
   static const String GET_ALL_ORDER = "$BASE_URL/orders";
   static const String GET_ALL_ORDER_DASHBOARD = "$BASE_URL/orders/dashboard";
   static const String UPDATE_ORDER_STATUS = "$BASE_URL/orders/update-status";

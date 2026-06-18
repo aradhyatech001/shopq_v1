@@ -7,9 +7,10 @@ class Order extends Model
     public $timestamps = false;
     protected $table = 'orders';
     protected $fillable = [
-        'user_id', 'total_amount', 'coupon_code', 'discount_amount',
-        'delivery_charge', 'handling_charge', 'final_amount', 'status',
-        'derived_status', 'payment_method', 'payment_status', 'order_datetime',
+        'user_id', 'total_amount', 'coupon_code', 'coupon_title', 'coupon_type',
+        'coupon_value', 'coupon_discount', 'discount_amount',
+        'delivery_charge', 'handling_charge', 'final_amount', 'settlement_frozen',
+        'status', 'derived_status', 'payment_method', 'payment_status', 'order_datetime', 'ordered_at',
         'delivery_date', 'delivery_time', 'location_id', 'gift',
     ];
 

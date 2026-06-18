@@ -22,12 +22,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _loading = true;
   Map<String, dynamic> _data = {};
   String _vendorName = 'Vendor';
+  double _pendingPayout = 0;
+  List _lowStockItems = [];
 
   @override
   void initState() {
     super.initState();
     _loadVendor();
     _fetch();
+    _fetchExtra();
   }
 
   Future<void> _loadVendor() async {
@@ -52,6 +55,70 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  Future<void> _fetchExtra() async {
+    try {
+      final results = await Future.wait([
+        VendorApiHelper.get(ApiConstants.VENDOR_PAYOUTS),
+        VendorApiHelper.get(ApiConstants.VENDOR_LOW_STOCK),
+      ]);
+
+      final payoutData = jsonDecode(results[0].body);
+      if (payoutData['success'] == true) {
+        final payouts = payoutData['payouts'] as List? ?? [];
+        double pending = 0;
+        for (final p in payouts) {
+          if ((p['status'] ?? '') == 'pending' || p['paid_at'] == null) {
+            pending += double.tryParse(p['amount']?.toString() ?? '0') ?? 0;
+          }
+        }
+        if (mounted) setState(() => _pendingPayout = pending);
+      }
+
+      final stockData = jsonDecode(results[1].body);
+      if (stockData['success'] == true && mounted) {
+        setState(() => _lowStockItems = stockData['items'] as List? ?? []);
+      }
+    } catch (_) {}
+  }
+
+  Widget _stockRow(dynamic item) {
+    final name =
+        '${item['product_name'] ?? ''}${(item['variant_name'] ?? '').toString().isNotEmpty ? ' – ${item['variant_name']}' : ''}';
+    final stock = (item['stock'] as num?)?.toInt() ?? 0;
+    final isOut = stock == 0;
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 8.h),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              name,
+              style: GoogleFonts.jost(fontSize: 13.sp),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 2.h),
+            decoration: BoxDecoration(
+              color: (isOut ? AppColors.error : AppColors.warning)
+                  .withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8.r),
+            ),
+            child: Text(
+              isOut ? 'Out of stock' : 'Stock: $stock',
+              style: GoogleFonts.jost(
+                fontSize: 11.sp,
+                fontWeight: FontWeight.w700,
+                color: isOut ? AppColors.error : AppColors.warning,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final byStatus =
@@ -60,6 +127,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final cols = Responsive.isDesktop(context)
         ? 4
         : (Responsive.isTablet(context) ? 3 : 2);
+        
+    final statCardRatio = Responsive.isDesktop(context)
+        ? 2.4
+        : (Responsive.isTablet(context) ? 2.4 : 1.5);
 
     return VendorPage(
       title: 'Dashboard',
@@ -84,10 +155,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     crossAxisCount: cols,
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    crossAxisSpacing: 12.w,
-                    mainAxisSpacing: 12.h,
-                    // childAspectRatio: 1.35,
-                    childAspectRatio: 1.5,
+                    crossAxisSpacing: 4.w,
+                    mainAxisSpacing: 4.h,
+                    childAspectRatio: statCardRatio,
                     children: [
                       StatCard(
                         label: 'Total Products',
@@ -196,6 +266,93 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ],
                           ),
                   ),
+                  // ── Pending Payout ───────────────────────────
+                  if (_pendingPayout > 0) ...[
+                    SizedBox(height: 20.h),
+                    Text(
+                      'Pending Payout',
+                      style: GoogleFonts.jost(
+                          fontSize: 15.sp, fontWeight: FontWeight.w700),
+                    ),
+                    SizedBox(height: 10.h),
+                    VCard(
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 40.w,
+                            height: 40.w,
+                            decoration: BoxDecoration(
+                              color:
+                                  AppColors.success.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(10.r),
+                            ),
+                            child: Icon(
+                                Icons.account_balance_wallet_rounded,
+                                color: AppColors.success,
+                                size: 20.sp),
+                          ),
+                          SizedBox(width: 12.w),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Earnings to be paid',
+                                  style: GoogleFonts.jost(
+                                      fontSize: 12.sp,
+                                      color: AppColors.textSecondary),
+                                ),
+                                Text(
+                                  '₹${money(_pendingPayout)}',
+                                  style: GoogleFonts.jost(
+                                      fontSize: 18.sp,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.success),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  // ── Low Stock Alerts ─────────────────────────
+                  if (_lowStockItems.isNotEmpty) ...[
+                    SizedBox(height: 20.h),
+                    Text(
+                      'Low Stock Alerts',
+                      style: GoogleFonts.jost(
+                          fontSize: 15.sp, fontWeight: FontWeight.w700),
+                    ),
+                    SizedBox(height: 10.h),
+                    VCard(
+                      child: Column(
+                        children: [
+                          for (int i = 0;
+                              i < _lowStockItems.length.clamp(0, 5);
+                              i++) ...[
+                            if (i > 0)
+                              Divider(
+                                  height: 1.h,
+                                  color: AppColors.dividerColor),
+                            _stockRow(_lowStockItems[i]),
+                          ],
+                          if (_lowStockItems.length > 5)
+                            Padding(
+                              padding: EdgeInsets.only(top: 8.h),
+                              child: Text(
+                                '+${_lowStockItems.length - 5} more items',
+                                style: GoogleFonts.jost(
+                                    fontSize: 12.sp,
+                                    color: AppColors.textSecondary),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+
                   SizedBox(height: 16.h),
                 ],
               ),

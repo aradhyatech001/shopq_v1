@@ -8,7 +8,6 @@ use App\Models\ProductInfo;
 use App\Models\ProductHighlight;
 use App\Models\ProductImage;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 
 class VendorProductController extends Controller
@@ -17,7 +16,8 @@ class VendorProductController extends Controller
     public function index(Request $request)
     {
         $vendor   = $request->user();
-        $products = Product::with(['category:id,name', 'variants'])
+        // Eager-load all relationships up-front to avoid N+1 in formatProduct().
+        $products = Product::with(['category:id,name', 'variants', 'highlights', 'info', 'images'])
             ->where('vendor_id', $vendor->id)
             ->orderByDesc('id')
             ->get()
@@ -30,7 +30,7 @@ class VendorProductController extends Controller
     public function single(Request $request)
     {
         $vendor  = $request->user();
-        $product = Product::with(['category:id,name', 'variants'])
+        $product = Product::with(['category:id,name', 'variants', 'highlights', 'info', 'images'])
             ->where('id', $request->query('product_id'))
             ->where('vendor_id', $vendor->id)
             ->first();
@@ -55,9 +55,7 @@ class VendorProductController extends Controller
             return response()->json(['success' => false, 'message' => 'name and main_category_id required']);
         }
 
-        $subColNew = Schema::hasColumn('products', 'subcategory_id');
-        $subColOld = Schema::hasColumn('products', 'sub_category_id');
-        $subId     = $data['subcategory_id'] ?? $data['sub_category_id'] ?? null;
+        $subId = $data['subcategory_id'] ?? $data['sub_category_id'] ?? null;
 
         $createData = [
             'vendor_id'        => $vendor->id,
@@ -69,8 +67,7 @@ class VendorProductController extends Controller
         ];
 
         if ($subId) {
-            if ($subColNew) $createData['subcategory_id']  = $subId;
-            if ($subColOld) $createData['sub_category_id'] = $subId;
+            $createData['subcategory_id'] = $subId;
         }
 
         $product = Product::create($createData);
@@ -98,11 +95,8 @@ class VendorProductController extends Controller
         if (isset($data['main_category_id'])) $updateData['main_category_id'] = $data['main_category_id'];
         if (isset($data['types']))            $updateData['types']            = $data['types'];
 
-        $subColNew = Schema::hasColumn('products', 'subcategory_id');
-        $subColOld = Schema::hasColumn('products', 'sub_category_id');
         if (isset($data['subcategory_id'])) {
-            if ($subColNew) $updateData['subcategory_id']  = $data['subcategory_id'];
-            if ($subColOld) $updateData['sub_category_id'] = $data['subcategory_id'];
+            $updateData['subcategory_id'] = $data['subcategory_id'];
         }
 
         $product->update($updateData);
@@ -212,11 +206,20 @@ class VendorProductController extends Controller
 
         if ($request->hasFile('image') && $request->input('product_id')) {
             $file      = $request->file('image');
-            $fileName  = uniqid() . '_' . $file->getClientOriginalName();
+            $ext       = strtolower($file->getClientOriginalExtension());
+            if (!in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true)) {
+                return response()->json(['success' => false, 'message' => 'Invalid image type'], 422);
+            }
+            $fileName  = uniqid() . '_' . basename($file->getClientOriginalName());
             $path      = $file->storeAs('uploads', $fileName, 'public');
             ProductImage::create(['product_id' => $product->id, 'image_url' => $path]);
         } elseif ($request->has('data') && $request->has('name')) {
-            $path = 'products/' . $request->input('name');
+            // Sanitize the submitted filename: strip directory components and
+            // enforce image extension (prevents path-traversal writes).
+            $path = $this->safeStorePath('products', $request->input('name'));
+            if (!$path) {
+                return response()->json(['success' => false, 'message' => 'Invalid image file type'], 422);
+            }
             Storage::disk('public')->put($path, base64_decode($request->input('data')));
             $product->images()->create(['image_url' => $path]);
         } else {
@@ -254,6 +257,37 @@ class VendorProductController extends Controller
         }
 
         return response()->json(['success' => false, 'message' => 'variant_id or product_id required']);
+    }
+
+    // ── GET /vendor/products/low-stock (auth:vendor) ──
+    // Returns variants with stock <= threshold (default 5).
+    public function lowStock(Request $request)
+    {
+        $vendor    = $request->user();
+        $threshold = max(1, (int) $request->query('threshold', 5));
+
+        $rows = DB::select("
+            SELECT p.id AS product_id, p.name AS product_name, p.image_url,
+                   pv.id AS variant_id, pv.name AS variant_name, pv.stock
+            FROM product_variants pv
+            JOIN products p ON pv.product_id = p.id
+            WHERE p.vendor_id = ? AND pv.stock <= ? AND p.is_active = 1
+            ORDER BY pv.stock ASC
+        ", [$vendor->id, $threshold]);
+
+        return response()->json([
+            'success'   => true,
+            'threshold' => $threshold,
+            'count'     => count($rows),
+            'items'     => array_map(fn($r) => [
+                'product_id'   => $r->product_id,
+                'product_name' => $r->product_name,
+                'image_url'    => $this->imageUrl($r->image_url),
+                'variant_id'   => $r->variant_id,
+                'variant_name' => $r->variant_name,
+                'stock'        => (int) $r->stock,
+            ], $rows),
+        ]);
     }
 
     public function updateType(Request $request)
@@ -344,7 +378,23 @@ class VendorProductController extends Controller
                     'id'              => $vo->id,                 // sub-order id
                     'parent_order_id' => $vo->parent_order_id,
                     'status'          => $vo->status,
-                    'total'           => (float) $vo->items_subtotal,
+                    // Frozen settlement — the vendor's authoritative figure.
+                    'collect_amount'  => (int) $vo->collect_amount,
+                    'total'           => (int) $vo->collect_amount, // headline = collect
+                    'goods_subtotal'  => (int) $vo->goods_subtotal,
+                    'coupon_share'    => (int) $vo->coupon_share,
+                    'delivery_share'  => (int) $vo->delivery_share,
+                    'handling_share'  => (int) $vo->handling_share,
+                    'commission_amount' => (float) $vo->commission_amount,
+                    'vendor_earning'  => (float) $vo->vendor_earning,
+                    'payment_method'  => $vo->parent?->payment_method,
+                    'payment_status'  => $vo->payment_status,
+                    // Coupon (code + this vendor's discount impact only).
+                    'coupon'          => $vo->parent?->coupon_code ? [
+                        'code'    => $vo->parent->coupon_code,
+                        'title'   => $vo->parent->coupon_title,
+                        'impact'  => (int) $vo->coupon_share,
+                    ] : null,
                     'tracking_number' => $vo->tracking_number,
                     'courier_name'    => $vo->courier_name,
                     'delivery_boy_id' => $vo->delivery_boy_id,
@@ -537,6 +587,7 @@ class VendorProductController extends Controller
     }
 
     // ── Helper ────────────────────────────────────────
+    // All relationships are eager-loaded in index()/single() — no extra queries here.
     private function formatProduct($p): array
     {
         return [
@@ -544,28 +595,27 @@ class VendorProductController extends Controller
             'name'             => $p->name,
             'description'      => $p->description,
             'main_category_id' => $p->main_category_id,
-            'subcategory_id'   => Schema::hasColumn('products', 'subcategory_id') ? $p->subcategory_id : $p->sub_category_id,
+            'subcategory_id'   => $p->subcategory_id,
             'category_name'    => $p->category?->name,
             'types'            => $p->types,
             'is_active'        => $p->is_active,
-            // Variants with explicit field names the form expects.
-            'variants'         => ProductVariant::where('product_id', $p->id)->get()->map(fn($v) => [
-                'id'              => $v->id,
-                'name'            => $v->name,
-                'price'           => $v->price,
-                'selling_price'   => $v->selling_price,
-                'wholesale_price' => $v->wholesale_price,
-                'stock'           => $v->stock,
-            ])->toArray(),
-            'highlights'       => ProductHighlight::where('product_id', $p->id)
-                ->get(['id', 'attribute', 'value'])->toArray(),
-            'info'             => ProductInfo::where('product_id', $p->id)
-                ->get(['id', 'attribute', 'value'])->toArray(),
-            // Full /api/files/ URLs — these pass through Laravel's CORS middleware
-            // (unlike the static /storage/ path), so they load on Flutter web where
-            // images are painted to canvas. syncImages() strips the prefix on save.
-            'images'           => $p->images()->pluck('image_url')
-                ->map(fn($u) => $this->imageUrl($u))->toArray(),
+            'variants'         => ($p->relationLoaded('variants') ? $p->variants : $p->variants()->get())
+                ->map(fn($v) => [
+                    'id'              => $v->id,
+                    'name'            => $v->name,
+                    'price'           => $v->price,
+                    'selling_price'   => $v->selling_price,
+                    'wholesale_price' => $v->wholesale_price,
+                    'stock'           => $v->stock,
+                ])->toArray(),
+            'highlights'       => ($p->relationLoaded('highlights') ? $p->highlights : $p->highlights()->get())
+                ->map(fn($h) => ['id' => $h->id, 'attribute' => $h->attribute, 'value' => $h->value])->toArray(),
+            'info'             => ($p->relationLoaded('info') ? $p->info : $p->info()->get())
+                ->map(fn($i) => ['id' => $i->id, 'attribute' => $i->attribute, 'value' => $i->value])->toArray(),
+            // Full /api/files/ URLs pass through Laravel's CORS middleware (unlike /storage/),
+            // so they render correctly on Flutter web. syncImages() strips the prefix on save.
+            'images'           => ($p->relationLoaded('images') ? $p->images : $p->images()->get())
+                ->pluck('image_url')->map(fn($u) => $this->imageUrl($u))->toArray(),
         ];
     }
 }

@@ -70,6 +70,40 @@ class DeliveryController extends Controller
         return response()->json(['success' => true, 'orders' => $orders]);
     }
 
+    // ── POST /delivery/orders/confirm-cod ────────────
+    // Rider confirms cash collected at door. Flips payment_status to 'collected'
+    // and records the exact amount handed over, so the admin can reconcile.
+    public function confirmCod(Request $request)
+    {
+        $rider  = $request->user();
+        $id     = (int) ($request->input('vendor_order_id') ?? $request->input('order_id'));
+        $amount = (float) $request->input('cod_collected_amount', 0);
+
+        if (!$id) {
+            return response()->json(['success' => false, 'message' => 'vendor_order_id required'], 422);
+        }
+
+        $vo = VendorOrder::where('id', $id)->where('delivery_boy_id', $rider->id)->first();
+        if (!$vo) {
+            return response()->json(['success' => false, 'message' => 'Order not assigned to you'], 404);
+        }
+
+        if (strtolower((string) ($vo->parent?->payment_method)) !== 'cod') {
+            return response()->json(['success' => false, 'message' => 'Not a COD order'], 422);
+        }
+
+        if (strtolower((string) $vo->payment_status) === 'collected') {
+            return response()->json(['success' => true, 'message' => 'Already confirmed']);
+        }
+
+        $vo->update([
+            'cod_collected_amount' => $amount,
+            'payment_status'       => 'collected',
+        ]);
+
+        return response()->json(['success' => true, 'message' => 'COD collection confirmed', 'amount' => $amount]);
+    }
+
     // ── POST /delivery/orders/update-status ───────────
     // Rider can only advance pickup → out for delivery → delivered.
     public function updateStatus(Request $request)
@@ -107,31 +141,38 @@ class DeliveryController extends Controller
 
     private function formatOrder(VendorOrder $vo): array
     {
-        $addr = $vo->parent?->address;
+        $addr   = $vo->parent?->address;
+        $method = strtoupper((string) ($vo->parent?->payment_method ?? 'COD'));
+        $isCod  = $method === 'COD';
+        $paid   = strtolower((string) $vo->payment_status) === 'paid'
+               || strtolower((string) $vo->parent?->payment_status) === 'paid';
+        // Door cash: only COD-and-unpaid collects; prepaid/online collects 0.
+        // The frozen settlement figure stays visible for reference; reports use it.
+        $codCollect = ($isCod && !$paid) ? (int) $vo->collect_amount : 0;
+
         return [
             'id'              => $vo->id,
             'parent_order_id' => $vo->parent_order_id,
             'status'          => $vo->status,
             'shop_name'       => $vo->vendor?->shop_name ?: $vo->vendor?->name,
-            'total'           => (float) $vo->items_subtotal,
+            // Frozen collect (settlement) + the cash to actually collect at door.
+            'collect_amount'  => (int) $vo->collect_amount,
+            'cod_collect'     => $codCollect,
+            'total'           => (int) $vo->collect_amount, // headline = collect, not subtotal
+            'payment_method'  => $method,
+            'payment_status'  => $vo->payment_status,
             'created_at'      => $vo->parent?->order_datetime,
             'customer'        => $vo->parent?->user?->name,
             'address'         => $addr ? [
                 'name' => $addr->name, 'phone' => $addr->phone,
                 'full_address' => $addr->full_address, 'pin_code' => $addr->pin_code,
             ] : null,
+            // Pickup checklist only — no pricing / discount / settlement detail.
             'items'           => $vo->items->map(function ($i) {
-                $unit = (float) $i->price;
-                $mrp  = (float) ($i->variant?->price ?? 0);
-                $disc = ($mrp > $unit && $mrp > 0) ? round(($mrp - $unit) / $mrp * 100) : 0;
                 return [
                     'product_name' => $i->product?->name,
                     'variant_name' => $i->variant?->name,
                     'quantity'     => $i->quantity,
-                    'price'        => $unit,
-                    'mrp'          => $mrp,
-                    'discount'     => $disc,
-                    'line_total'   => $unit * (int) $i->quantity,
                     'image'        => $this->imageUrl($i->product?->images?->first()?->image_url),
                 ];
             })->values()->toArray(),

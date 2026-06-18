@@ -25,6 +25,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _pendingOrders = 0;
   double _totalRevenue = 0;
   int _totalUsers = 0;
+  int _pendingRefunds = 0;
+  double _unpaidEarnings = 0;
 
   List<double> _weeklySales = List.filled(7, 0);
   List<Map<String, dynamic>> _recentOrders = [];
@@ -38,7 +40,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _loadAll() async {
     setState(() => _loading = true);
-    await Future.wait([_fetchDashboard(), _fetchTotalUsers()]);
+    await Future.wait([_fetchDashboard(), _fetchTotalUsers(), _fetchPendingRefunds(), _fetchUnpaidEarnings()]);
     if (mounted) setState(() => _loading = false);
   }
 
@@ -75,6 +77,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (e) {
       debugPrint('Users fetch error: $e');
     }
+  }
+
+  // ── API: pending refund count ──────────────────────────────
+  Future<void> _fetchPendingRefunds() async {
+    try {
+      final res = await AdminApi.get(
+        Uri.parse('${ApiConstants.ADMIN_REFUNDS}?status=pending'),
+      );
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true && mounted) {
+          final list = data['refunds'] as List? ?? [];
+          _pendingRefunds = (data['total'] as num?)?.toInt() ?? list.length;
+        }
+      }
+    } catch (_) {}
+  }
+
+  // ── API: total unpaid vendor earnings ──────────────────────
+  Future<void> _fetchUnpaidEarnings() async {
+    try {
+      final res = await AdminApi.get(
+        Uri.parse(ApiConstants.ADMIN_PAYOUTS_PENDING),
+      );
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        if (data['success'] == true && mounted) {
+          final vendors = data['data'] as List? ?? [];
+          _unpaidEarnings = vendors.fold(0.0, (sum, v) {
+            return sum +
+                (double.tryParse(v['pending_amount']?.toString() ?? '0') ?? 0);
+          });
+        }
+      }
+    } catch (_) {}
   }
 
   // ── Compute stats from orders list ────────────────────────
@@ -279,6 +316,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
         icon: Icons.people_rounded,
         color: AppColors.cardRed,
         subtitle: 'Registered',
+      ),
+      _StatCardData(
+        title: 'Pending Refunds',
+        value: _pendingRefunds.toString(),
+        icon: Icons.assignment_return_rounded,
+        color: AppColors.cardOrange,
+        subtitle: 'Awaiting action',
+      ),
+      _StatCardData(
+        title: 'Unpaid Earnings',
+        value: _fmt(_unpaidEarnings),
+        icon: Icons.account_balance_wallet_rounded,
+        color: AppColors.cardTeal,
+        subtitle: 'Vendor payouts due',
       ),
     ];
 

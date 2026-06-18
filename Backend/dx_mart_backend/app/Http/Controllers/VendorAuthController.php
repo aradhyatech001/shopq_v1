@@ -31,10 +31,13 @@ class VendorAuthController extends Controller
             return response()->json(['success' => false, 'message' => 'Email already registered']);
         }
 
-        // Logo upload
+        // Logo upload — sanitize filename to prevent path traversal attacks.
         $logoPath = null;
         if ($request->has('logo_data') && $request->has('logo_name')) {
-            $logoPath = 'vendors/' . $request->input('logo_name');
+            $logoPath = $this->safeStorePath('vendors', $request->input('logo_name'));
+            if (!$logoPath) {
+                return response()->json(['success' => false, 'message' => 'Invalid logo file type'], 422);
+            }
             Storage::disk('public')->put($logoPath, base64_decode($request->input('logo_data')));
         }
 
@@ -133,10 +136,13 @@ class VendorAuthController extends Controller
             $updates['password'] = Hash::make($request->input('password'));
         }
 
-        // Logo update
+        // Logo update — sanitize filename to prevent path traversal attacks.
         if ($request->has('logo_data') && $request->has('logo_name')) {
+            $logoPath = $this->safeStorePath('vendors', $request->input('logo_name'));
+            if (!$logoPath) {
+                return response()->json(['success' => false, 'message' => 'Invalid logo file type'], 422);
+            }
             if ($vendor->logo) Storage::disk('public')->delete($vendor->logo);
-            $logoPath = 'vendors/' . $request->input('logo_name');
             Storage::disk('public')->put($logoPath, base64_decode($request->input('logo_data')));
             $updates['logo'] = $logoPath;
         }
@@ -155,8 +161,8 @@ class VendorAuthController extends Controller
         }
 
         $new = $request->input('password');
-        if (!$new || strlen($new) < 6) {
-            return response()->json(['success' => false, 'message' => 'New password must be at least 6 characters'], 422);
+        if (!$new || strlen($new) < 8) {
+            return response()->json(['success' => false, 'message' => 'New password must be at least 8 characters'], 422);
         }
         if ($new !== $request->input('password_confirmation')) {
             return response()->json(['success' => false, 'message' => 'Passwords do not match'], 422);

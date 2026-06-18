@@ -10,6 +10,9 @@ class VendorOrder extends Model
 
     protected $fillable = [
         'parent_order_id', 'vendor_id', 'status', 'items_subtotal',
+        // Frozen settlement snapshot (whole rupees).
+        'goods_subtotal', 'coupon_share', 'delivery_share', 'handling_share',
+        'collect_amount', 'payment_status', 'cod_collected_amount',
         'commission_rate', 'commission_amount', 'vendor_earning',
         'delivery_boy_id', 'tracking_number', 'courier_name', 'cancel_reason',
         'payout_id', 'confirmed_at', 'packed_at', 'assigned_at', 'picked_up_at',

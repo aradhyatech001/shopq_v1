@@ -32,6 +32,7 @@ class _TrackOrderState extends State<TrackOrder> {
   String deliveryTime = '0';
   bool _cancelled = false;
   Timer? _pollTimer;
+  List _history = [];
 
   @override
   void initState() {
@@ -41,6 +42,7 @@ class _TrackOrderState extends State<TrackOrder> {
     // Pull the live status and keep it fresh so vendor/admin updates show up.
     if (widget.orderId.isNotEmpty) {
       _fetchLiveStatus();
+      _fetchHistory();
       _pollTimer = Timer.periodic(
         const Duration(seconds: 12),
         (_) => _fetchLiveStatus(),
@@ -71,6 +73,81 @@ class _TrackOrderState extends State<TrackOrder> {
     } catch (_) {}
   }
 
+
+  Future<void> _fetchHistory() async {
+    try {
+      final id = int.tryParse(widget.orderId) ?? 0;
+      if (id == 0) return;
+      final res =
+          await ApiHelper.get(ApiConstants.orderHistory(id), auth: true);
+      if (res.statusCode != 200) return;
+      final data = jsonDecode(res.body);
+      if (data['success'] == true && mounted) {
+        setState(() => _history = data['history'] as List? ?? []);
+      }
+    } catch (_) {}
+  }
+
+  Widget _historyItem(dynamic h) {
+    final from = _hCap((h['from_status'] ?? '').toString());
+    final to = _hCap((h['to_status'] ?? '').toString());
+    final actor = (h['actor_type'] ?? '').toString();
+    final time = _historyTime(h['created_at']?.toString());
+    return Padding(
+      padding: EdgeInsets.only(bottom: 12.h),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 8.w,
+            height: 8.w,
+            margin: EdgeInsets.only(top: 5.h),
+            decoration: BoxDecoration(
+              color: AppColors.primaryColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+          SizedBox(width: 10.w),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$from → $to',
+                  style: GoogleFonts.jost(
+                      fontSize: 13.sp, fontWeight: FontWeight.w600),
+                ),
+                Text(
+                  '$time · $actor',
+                  style: GoogleFonts.jost(
+                      fontSize: 11.sp, color: Colors.black54),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _hCap(String s) =>
+      s.isEmpty ? s : s[0].toUpperCase() + s.substring(1).replaceAll('_', ' ');
+
+  String _historyTime(String? raw) {
+    if (raw == null || raw.isEmpty) return '';
+    try {
+      final dt = DateTime.parse(raw).toLocal();
+      const months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      ];
+      return '${dt.day} ${months[dt.month - 1]} '
+          '${dt.hour.toString().padLeft(2, '0')}:'
+          '${dt.minute.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return raw;
+    }
+  }
 
   Future<void> fetchDeliveryTime() async {
     final url = Uri.parse(ApiConstants.DELIVERY_TIME);
@@ -297,6 +374,28 @@ class _TrackOrderState extends State<TrackOrder> {
                     subtitle:
                     "Your order has been delivered to your provided address.",
                   ),
+                  if (_history.isNotEmpty) ...[
+                    SizedBox(height: 8.h),
+                    Padding(
+                      padding: EdgeInsets.only(right: 20.w),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Divider(color: Colors.grey.shade200),
+                          SizedBox(height: 8.h),
+                          Text(
+                            'Status History',
+                            style: GoogleFonts.jost(
+                              fontSize: 15.sp,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          SizedBox(height: 12.h),
+                          ..._history.map((h) => _historyItem(h)),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

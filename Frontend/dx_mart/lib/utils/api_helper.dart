@@ -25,10 +25,30 @@ class ApiHelper {
     return token.isNotEmpty ? {'Authorization': 'Bearer $token'} : {};
   }
 
+  // ── Location (selected delivery pincode) ──────────────────
+  /// The pincode id the user picked on the LocationScreen (0 = none set).
+  static Future<int> getPincodeId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return int.tryParse(prefs.getString('pincode_id') ?? '') ?? 0;
+  }
+
+  /// Appends the saved delivery pincode as a query param so the API returns
+  /// only products / stores deliverable to the user's location. No-op when
+  /// no location has been chosen yet.
+  static Future<String> withPincode(String url) async {
+    final pid = await getPincodeId();
+    if (pid <= 0) return url;
+    final sep = url.contains('?') ? '&' : '?';
+    return '$url${sep}pincode_id=$pid';
+  }
+
   // ── Convenience methods ───────────────────────────────────
-  static Future<http.Response> get(String url, {bool auth = false}) async {
+  /// Set [pincode] true on storefront calls (products / shops / tab layout)
+  /// so results are scoped to the user's selected delivery pincode.
+  static Future<http.Response> get(String url, {bool auth = false, bool pincode = false}) async {
     final headers = auth ? await getAuthHeaders() : <String, String>{};
-    return http.get(Uri.parse(url), headers: headers);
+    final finalUrl = pincode ? await withPincode(url) : url;
+    return http.get(Uri.parse(finalUrl), headers: headers);
   }
 
   static Future<http.Response> post(String url, {
@@ -56,31 +76,14 @@ class ApiHelper {
   }
 
   // ── User info (cached) ────────────────────────────────────
+  // user_id is always saved at login time; we read from cache only.
+  // The old unauthenticated /auth/user?email= endpoint is now auth-protected
+  // and returns only id+name, so the fallback call is no longer needed.
   static Future<Map<String, String>> getUserInfo() async {
     final prefs = await SharedPreferences.getInstance();
-    final cachedId = prefs.getString('user_id') ?? '';
-    final cachedName = prefs.getString('user_name') ?? '';
-    final email = prefs.getString('user_email') ?? '';
-
-    if (cachedId.isNotEmpty) {
-      return {'id': cachedId, 'name': cachedName, 'email': email};
-    }
-
-    if (email.isNotEmpty) {
-      try {
-        final res = await http.get(Uri.parse('${ApiConstants.GET_USER}?email=$email'));
-        if (res.statusCode == 200) {
-          final data = jsonDecode(res.body);
-          if (data['status'] == 'success' && data['user'] != null) {
-            final id = data['user']['id']?.toString() ?? '';
-            final name = data['user']['name']?.toString() ?? '';
-            await prefs.setString('user_id', id);
-            await prefs.setString('user_name', name);
-            return {'id': id, 'name': name, 'email': email};
-          }
-        }
-      } catch (_) {}
-    }
-    return {'id': '', 'name': '', 'email': email};
+    final cachedId   = prefs.getString('user_id')    ?? '';
+    final cachedName = prefs.getString('user_name')  ?? '';
+    final email      = prefs.getString('user_email') ?? '';
+    return {'id': cachedId, 'name': cachedName, 'email': email};
   }
 }

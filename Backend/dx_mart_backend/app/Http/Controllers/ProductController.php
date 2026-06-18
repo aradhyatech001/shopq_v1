@@ -97,6 +97,7 @@ class ProductController extends Controller
         $categoryId = $request->query('category_id');
 
         $query = Product::with(['category:id,name', 'subcategory:id,name', 'variants', 'info', 'highlights', 'images'])->visible();
+        $query->servingPincode($this->resolvePincodeId($request));
         if ($search) {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%$search%")->orWhere('description', 'like', "%$search%");
@@ -141,6 +142,7 @@ class ProductController extends Controller
         $hasSubOld = Schema::hasColumn('products', 'sub_category_id');
 
         $query = Product::with(['category:id,name,image', 'subcategory:id,name', 'variants', 'info', 'highlights', 'images'])->visible();
+        $query->servingPincode($this->resolvePincodeId($request));
 
         // category_id=0 or missing = no category filter (used for deals/all-products tabs)
         if ($categoryId > 0) {
@@ -173,6 +175,7 @@ class ProductController extends Controller
         $type   = $request->query('type', '');
 
         $query = Product::with(['category:id,name,image', 'variants', 'info', 'highlights', 'images'])->visible();
+        $query->servingPincode($this->resolvePincodeId($request));
         if ($type) $query->whereRaw("FIND_IN_SET(?, types)", [$type]);
 
         $total    = $query->count();
@@ -191,6 +194,7 @@ class ProductController extends Controller
         }
 
         $query = Product::with(['category:id,name,image', 'variants', 'info', 'highlights', 'images'])->visible();
+        $query->servingPincode($this->resolvePincodeId($request));
         if ($subcategoryId > 0 && Schema::hasColumn('products', 'subcategory_id')) {
             $query->where('subcategory_id', $subcategoryId);
         } elseif ($categoryId > 0) {
@@ -342,6 +346,38 @@ class ProductController extends Controller
         $type = $request->input('type');
         Product::where('id', $id)->update(['types' => $type]);
         return response()->json(['status' => 'success']);
+    }
+
+    // ── GET /admin/products/low-stock (auth:admin) ─────
+    // Returns all active variants with stock <= threshold across all vendors.
+    public function lowStock(Request $request)
+    {
+        $threshold = max(1, (int) $request->query('threshold', 5));
+
+        $rows = DB::select("
+            SELECT p.id AS product_id, p.name AS product_name, p.image_url,
+                   p.vendor_id,
+                   pv.id AS variant_id, pv.name AS variant_name, pv.stock
+            FROM product_variants pv
+            JOIN products p ON pv.product_id = p.id
+            WHERE pv.stock <= ? AND p.is_active = 1
+            ORDER BY pv.stock ASC
+        ", [$threshold]);
+
+        return response()->json([
+            'success'   => true,
+            'threshold' => $threshold,
+            'count'     => count($rows),
+            'items'     => array_map(fn($r) => [
+                'product_id'   => $r->product_id,
+                'product_name' => $r->product_name,
+                'image_url'    => $this->imageUrl($r->image_url),
+                'vendor_id'    => $r->vendor_id,
+                'variant_id'   => $r->variant_id,
+                'variant_name' => $r->variant_name,
+                'stock'        => (int) $r->stock,
+            ], $rows),
+        ]);
     }
 
     public function uploadImage(Request $request)
