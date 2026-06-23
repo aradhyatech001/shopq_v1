@@ -1,0 +1,2760 @@
+openapi: 3.0.3
+
+info:
+  title: ShopQ API
+  description: |
+    REST API for ShopQ — user app, vendor app, and admin panel.
+
+    ## Authentication
+    | App | Method | Header |
+    |---|---|---|
+    | User App | Bearer Token (Sanctum) | `Authorization: Bearer <token>` |
+    | Vendor App | Bearer Token (Sanctum vendor guard) | `Authorization: Bearer <token>` |
+    | Admin Panel | Bearer Token (admin guard) | `Authorization: Bearer <token>` |
+
+    Tokens are returned from the respective login endpoints.
+  version: "1.0.0"
+  contact:
+    name: ShopQ Dev Team
+
+servers:
+  - url: http://192.168.1.7:8000/api
+    description: Local dev server
+  - url: http://localhost:8000/api
+    description: Localhost
+
+tags:
+  - name: User Auth
+  - name: Banners
+  - name: Categories
+  - name: Products
+  - name: Product Types
+  - name: Home Tabs
+  - name: Cart
+  - name: Wishlist
+  - name: Orders
+  - name: Delivery Address
+  - name: Coupons
+  - name: Settings
+  - name: Help
+  - name: Location
+  - name: Pincodes
+  - name: Subscription Plans
+  - name: Vendor Auth
+  - name: Vendor Products
+  - name: Admin
+  - name: Admin — Vendors
+  - name: Admin — Pincodes
+  - name: Admin — Subscription Plans
+
+components:
+  securitySchemes:
+    UserBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: Token
+      description: "Sanctum token from POST /auth/login"
+    VendorBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: Token
+      description: "Sanctum token from POST /vendor/login"
+    AdminBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: Token
+      description: "Admin token from POST /admin/login"
+
+  schemas:
+    SuccessTrue:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+
+    SuccessMessage:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+
+    Error:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+
+    Category:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        image_url: { type: string, nullable: true }
+        icon_url: { type: string, nullable: true }
+        color_code: { type: string, example: "#FFFFFF" }
+        tab_banner_url: { type: string, nullable: true }
+        tab_bg_color: { type: string, example: "#F5F5F5" }
+        description: { type: string, nullable: true }
+        is_active: { type: integer, example: 1 }
+        position: { type: integer }
+
+    Product:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        price: { type: number }
+        sale_price: { type: number, nullable: true }
+        image: { type: string, nullable: true }
+        stock: { type: integer }
+        category_id: { type: integer, nullable: true }
+        is_active: { type: integer }
+
+    Order:
+      type: object
+      properties:
+        id: { type: integer }
+        user_id: { type: integer }
+        status: { type: string, enum: [pending, processing, delivered, cancelled] }
+        total: { type: number }
+        created_at: { type: string, format: date-time }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              product_name: { type: string }
+              quantity: { type: integer }
+              price: { type: number }
+
+paths:
+
+  # ──────────────────────────────────────────
+  # USER AUTH
+  # ──────────────────────────────────────────
+
+  /auth/signup:
+    post:
+      tags: [User Auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password, phone]
+              properties:
+                name: { type: string, example: "John Doe" }
+                email: { type: string, example: "john@example.com" }
+                password: { type: string, example: "secret123" }
+                phone: { type: string, example: "9876543210" }
+      responses:
+        "200":
+          description: Registration successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  token: { type: string }
+                  user: { type: object }
+        "422":
+          description: Validation error
+
+  /auth/login:
+    post:
+      tags: [User Auth]
+      summary: User login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, example: "john@example.com" }
+                password: { type: string, example: "secret123" }
+      responses:
+        "200":
+          description: Login successful — returns token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  token: { type: string }
+                  user: { type: object }
+        "401":
+          description: Invalid credentials
+
+  /auth/forgot-password:
+    post:
+      tags: [User Auth]
+      summary: Send OTP for password reset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string }
+      responses:
+        "200":
+          description: OTP sent
+
+  /auth/verify-otp:
+    post:
+      tags: [User Auth]
+      summary: Verify OTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, otp]
+              properties:
+                email: { type: string }
+                otp: { type: string, example: "123456" }
+      responses:
+        "200":
+          description: OTP verified
+
+  /auth/reset-password:
+    post:
+      tags: [User Auth]
+      summary: Reset password after OTP verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, otp, password]
+              properties:
+                email: { type: string }
+                otp: { type: string }
+                password: { type: string }
+      responses:
+        "200":
+          description: Password reset successful
+
+  /auth/user:
+    get:
+      tags: [User Auth]
+      summary: Get user by ID (public)
+      parameters:
+        - in: query
+          name: user_id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: User data
+
+  /auth/logout:
+    post:
+      tags: [User Auth]
+      summary: Logout (invalidate token)
+      security:
+        - UserBearer: []
+      responses:
+        "200":
+          description: Logged out
+
+  /auth/edit-profile:
+    post:
+      tags: [User Auth]
+      summary: Edit user profile
+      security:
+        - UserBearer: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                phone: { type: string }
+                image: { type: string, format: binary }
+      responses:
+        "200":
+          description: Profile updated
+
+  /auth/set-pincode:
+    post:
+      tags: [User Auth]
+      summary: Set user delivery pincode
+      security:
+        - UserBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pincode_id]
+              properties:
+                pincode_id: { type: integer }
+      responses:
+        "200":
+          description: Pincode set
+
+  # ──────────────────────────────────────────
+  # BANNERS
+  # ──────────────────────────────────────────
+
+  /banners:
+    get:
+      tags: [Banners]
+      summary: Get active banners (public)
+      responses:
+        "200":
+          description: Banner list
+
+  /admin/banners:
+    get:
+      tags: [Banners]
+      summary: Get all banners including inactive (admin)
+      security:
+        - AdminBearer: []
+      responses:
+        "200":
+          description: All banners
+
+  /banners/add:
+    post:
+      tags: [Banners]
+      summary: Add banner (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image: { type: string, format: binary }
+                title: { type: string }
+                link: { type: string }
+      responses:
+        "200":
+          description: Banner added
+
+  /banners/edit:
+    post:
+      tags: [Banners]
+      summary: Edit banner (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: integer }
+                image: { type: string, format: binary }
+                title: { type: string }
+      responses:
+        "200":
+          description: Banner updated
+
+  /banners/toggle:
+    post:
+      tags: [Banners]
+      summary: Toggle banner active/inactive (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: integer }
+      responses:
+        "200":
+          description: Toggled
+
+  /banners/delete:
+    post:
+      tags: [Banners]
+      summary: Delete banner (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: integer }
+      responses:
+        "200":
+          description: Deleted
+
+  # ──────────────────────────────────────────
+  # CATEGORIES
+  # ──────────────────────────────────────────
+
+  /categories:
+    get:
+      tags: [Categories]
+      summary: Get active main categories (public)
+      responses:
+        "200":
+          description: Category list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Category"
+
+  /admin/categories:
+    get:
+      tags: [Categories]
+      summary: Get all categories including inactive (admin)
+      security:
+        - AdminBearer: []
+      responses:
+        "200":
+          description: All categories
+
+  /categories/subcategories:
+    get:
+      tags: [Categories]
+      summary: Get subcategories (active only unless ?admin=1)
+      parameters:
+        - in: query
+          name: parent_id
+          schema: { type: integer }
+          description: Filter by parent category
+        - in: query
+          name: admin
+          schema: { type: integer, enum: [0, 1] }
+          description: Pass 1 to include inactive subcategories
+      responses:
+        "200":
+          description: Subcategory list
+
+  /admin/categories/subcategories:
+    get:
+      tags: [Categories]
+      summary: Get all subcategories (admin)
+      security:
+        - AdminBearer: []
+      responses:
+        "200":
+          description: All subcategories
+
+  /categories/add:
+    post:
+      tags: [Categories]
+      summary: Add main category (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [category_name, image]
+              properties:
+                category_name: { type: string }
+                image: { type: string, format: binary }
+                icon_url: { type: string }
+                color_code: { type: string, example: "#FFFFFF" }
+                position: { type: integer }
+      responses:
+        "200":
+          description: Category added
+
+  /categories/edit:
+    post:
+      tags: [Categories]
+      summary: Edit main category (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: integer }
+                category_name: { type: string }
+                image: { type: string, format: binary }
+                icon_url: { type: string }
+                color_code: { type: string }
+                position: { type: integer }
+                is_active: { type: integer, enum: [0, 1] }
+      responses:
+        "200":
+          description: Category updated
+
+  /categories/delete:
+    post:
+      tags: [Categories]
+      summary: Delete category (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: integer }
+      responses:
+        "200":
+          description: Deleted
+
+  /categories/subcategories/add:
+    post:
+      tags: [Categories]
+      summary: Add subcategory (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [category_name, parent_id]
+              properties:
+                category_name: { type: string }
+                parent_id: { type: integer }
+                image: { type: string, format: binary }
+                position: { type: integer }
+      responses:
+        "200":
+          description: Subcategory added
+
+  /categories/subcategories/edit:
+    post:
+      tags: [Categories]
+      summary: Edit subcategory (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: integer }
+                category_name: { type: string }
+                image: { type: string, format: binary }
+                position: { type: integer }
+                is_active: { type: integer, enum: [0, 1] }
+      responses:
+        "200":
+          description: Subcategory updated
+
+  /categories/subcategories/delete:
+    post:
+      tags: [Categories]
+      summary: Delete subcategory (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: integer }
+      responses:
+        "200":
+          description: Deleted
+
+  # ──────────────────────────────────────────
+  # PRODUCT TYPES
+  # ──────────────────────────────────────────
+
+  /product-types:
+    get:
+      tags: [Product Types]
+      summary: Get all product types (public)
+      responses:
+        "200":
+          description: Product type list
+
+  /product-types/add:
+    post:
+      tags: [Product Types]
+      summary: Add product type (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                position: { type: integer }
+      responses:
+        "200":
+          description: Added
+
+  /product-types/edit:
+    post:
+      tags: [Product Types]
+      summary: Edit product type (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, name]
+              properties:
+                id: { type: integer }
+                name: { type: string }
+                position: { type: integer }
+      responses:
+        "200":
+          description: Updated
+
+  /product-types/delete:
+    post:
+      tags: [Product Types]
+      summary: Delete product type (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: integer }
+      responses:
+        "200":
+          description: Deleted
+
+  /product-types/reorder:
+    post:
+      tags: [Product Types]
+      summary: Reorder product types (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids:
+                  type: array
+                  items: { type: integer }
+                  description: IDs in desired order
+      responses:
+        "200":
+          description: Reordered
+
+  # ──────────────────────────────────────────
+  # HOME TABS
+  # ──────────────────────────────────────────
+
+  /home-tabs:
+    get:
+      tags: [Home Tabs]
+      summary: Get active home tabs (public)
+      responses:
+        "200":
+          description: Active home tabs
+
+  /home-tabs/all:
+    get:
+      tags: [Home Tabs]
+      summary: Get all home tabs including inactive (admin)
+      security:
+        - AdminBearer: []
+      responses:
+        "200":
+          description: All home tabs
+
+  /home-tabs/add:
+    post:
+      tags: [Home Tabs]
+      summary: Add home tab (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [name, tab_type]
+              properties:
+                name: { type: string }
+                tab_type: { type: string, enum: [category, type, deals, all] }
+                ref_id: { type: integer }
+                position: { type: integer }
+                banner_image: { type: string, format: binary }
+      responses:
+        "200":
+          description: Added
+
+  /home-tabs/edit:
+    post:
+      tags: [Home Tabs]
+      summary: Edit home tab (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: integer }
+                name: { type: string }
+                tab_type: { type: string }
+                ref_id: { type: integer }
+                position: { type: integer }
+                banner_image: { type: string, format: binary }
+      responses:
+        "200":
+          description: Updated
+
+  /home-tabs/delete:
+    post:
+      tags: [Home Tabs]
+      summary: Delete home tab (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: integer }
+      responses:
+        "200":
+          description: Deleted
+
+  /home-tabs/toggle:
+    post:
+      tags: [Home Tabs]
+      summary: Toggle home tab active/inactive (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: integer }
+      responses:
+        "200":
+          description: Toggled
+
+  /home-tabs/reorder:
+    post:
+      tags: [Home Tabs]
+      summary: Reorder home tabs (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids:
+                  type: array
+                  items: { type: integer }
+      responses:
+        "200":
+          description: Reordered
+
+  # ──────────────────────────────────────────
+  # PRODUCTS
+  # ──────────────────────────────────────────
+
+  /products:
+    get:
+      tags: [Products]
+      summary: Get all products (public)
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: limit
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Product list
+
+  /products/by-category:
+    get:
+      tags: [Products]
+      summary: Get products by category (public)
+      parameters:
+        - in: query
+          name: category_id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Products in category
+
+  /products/by-type:
+    get:
+      tags: [Products]
+      summary: Get products by type (public)
+      parameters:
+        - in: query
+          name: type_id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Products of type
+
+  /products/by-subcategory:
+    get:
+      tags: [Products]
+      summary: Get products by subcategory (public)
+      parameters:
+        - in: query
+          name: subcategory_id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Products in subcategory
+
+  /products/single:
+    get:
+      tags: [Products]
+      summary: Get single product (public)
+      parameters:
+        - in: query
+          name: product_id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Product detail
+
+  /products/insert:
+    post:
+      tags: [Products]
+      summary: Add product (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [name, price]
+              properties:
+                name: { type: string }
+                price: { type: number }
+                sale_price: { type: number }
+                stock: { type: integer }
+                category_id: { type: integer }
+                subcategory_id: { type: integer }
+                type_id: { type: integer }
+                image: { type: string, format: binary }
+                description: { type: string }
+                weight: { type: string }
+                unit: { type: string }
+      responses:
+        "200":
+          description: Product added
+
+  /products/update:
+    post:
+      tags: [Products]
+      summary: Update product (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: integer }
+                name: { type: string }
+                price: { type: number }
+                sale_price: { type: number }
+                stock: { type: integer }
+                category_id: { type: integer }
+                image: { type: string, format: binary }
+      responses:
+        "200":
+          description: Product updated
+
+  /products/delete:
+    post:
+      tags: [Products]
+      summary: Delete product (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: integer }
+      responses:
+        "200":
+          description: Deleted
+
+  /products/update-stock:
+    post:
+      tags: [Products]
+      summary: Update product stock (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, stock]
+              properties:
+                id: { type: integer }
+                stock: { type: integer }
+      responses:
+        "200":
+          description: Stock updated
+
+  /products/update-type:
+    post:
+      tags: [Products]
+      summary: Update product type (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, type_id]
+              properties:
+                id: { type: integer }
+                type_id: { type: integer }
+      responses:
+        "200":
+          description: Type updated
+
+  /products/upload-image:
+    post:
+      tags: [Products]
+      summary: Upload product image (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [id, image]
+              properties:
+                id: { type: integer }
+                image: { type: string, format: binary }
+      responses:
+        "200":
+          description: Image uploaded
+
+  /products/variant:
+    post:
+      tags: [Products]
+      summary: Save product variant (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [product_id]
+              properties:
+                product_id: { type: integer }
+                variants:
+                  type: array
+                  items: { type: object }
+      responses:
+        "200":
+          description: Variant saved
+
+  /products/highlight:
+    post:
+      tags: [Products]
+      summary: Save product highlights (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [product_id]
+              properties:
+                product_id: { type: integer }
+                highlights: { type: array, items: { type: string } }
+      responses:
+        "200":
+          description: Highlights saved
+
+  /products/info:
+    post:
+      tags: [Products]
+      summary: Save product info/specifications (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [product_id]
+              properties:
+                product_id: { type: integer }
+                info: { type: array, items: { type: object } }
+      responses:
+        "200":
+          description: Info saved
+
+  # ──────────────────────────────────────────
+  # CART
+  # ──────────────────────────────────────────
+
+  /cart/add:
+    post:
+      tags: [Cart]
+      summary: Add item to cart (no auth — uses user_id)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, product_id, quantity]
+              properties:
+                user_id: { type: integer }
+                product_id: { type: integer }
+                quantity: { type: integer }
+                variant_id: { type: integer }
+      responses:
+        "200":
+          description: Item added, returns cart_id
+
+  /cart:
+    get:
+      tags: [Cart]
+      summary: Get cart (no auth — uses user_id query param)
+      parameters:
+        - in: query
+          name: user_id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Cart items
+
+  /cart/remove:
+    get:
+      tags: [Cart]
+      summary: Remove item from cart
+      parameters:
+        - in: query
+          name: cart_id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Item removed
+
+  /cart/update-quantity:
+    post:
+      tags: [Cart]
+      summary: Update cart item quantity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cart_id, quantity]
+              properties:
+                cart_id: { type: integer }
+                quantity: { type: integer }
+      responses:
+        "200":
+          description: Quantity updated
+
+  # ──────────────────────────────────────────
+  # WISHLIST
+  # ──────────────────────────────────────────
+
+  /wishlist/add:
+    post:
+      tags: [Wishlist]
+      summary: Add to wishlist (no auth — uses user_id)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, product_id]
+              properties:
+                user_id: { type: integer }
+                product_id: { type: integer }
+      responses:
+        "200":
+          description: Added to wishlist
+
+  /wishlist:
+    get:
+      tags: [Wishlist]
+      summary: Get wishlist
+      parameters:
+        - in: query
+          name: user_id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Wishlist items
+
+  /wishlist/check:
+    get:
+      tags: [Wishlist]
+      summary: Check if product is in wishlist
+      parameters:
+        - in: query
+          name: user_id
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: product_id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Check result
+
+  /wishlist/remove:
+    post:
+      tags: [Wishlist]
+      summary: Remove from wishlist
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, product_id]
+              properties:
+                user_id: { type: integer }
+                product_id: { type: integer }
+      responses:
+        "200":
+          description: Removed
+
+  # ──────────────────────────────────────────
+  # ORDERS
+  # ──────────────────────────────────────────
+
+  /orders/place:
+    post:
+      tags: [Orders]
+      summary: Place order (user)
+      security:
+        - UserBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [address_id, items]
+              properties:
+                address_id: { type: integer }
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      product_id: { type: integer }
+                      quantity: { type: integer }
+                      price: { type: number }
+                coupon_code: { type: string }
+                total: { type: number }
+      responses:
+        "200":
+          description: Order placed
+
+  /orders/by-user:
+    post:
+      tags: [Orders]
+      summary: Get orders for logged-in user
+      security:
+        - UserBearer: []
+      responses:
+        "200":
+          description: User orders
+
+  /orders/{id}:
+    get:
+      tags: [Orders]
+      summary: Get single order by ID (user)
+      security:
+        - UserBearer: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Order detail
+
+  /orders:
+    get:
+      tags: [Orders]
+      summary: Get all orders (admin)
+      security:
+        - AdminBearer: []
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer }
+      responses:
+        "200":
+          description: All orders
+
+  /orders/dashboard:
+    get:
+      tags: [Orders]
+      summary: Get recent orders for dashboard (admin, max 200)
+      security:
+        - AdminBearer: []
+      responses:
+        "200":
+          description: Dashboard orders
+
+  /orders/update-status:
+    post:
+      tags: [Orders]
+      summary: Update order status (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [order_id, status]
+              properties:
+                order_id: { type: integer }
+                status: { type: string, enum: [pending, processing, delivered, cancelled] }
+      responses:
+        "200":
+          description: Status updated
+
+  /orders/sales-report:
+    get:
+      tags: [Orders]
+      summary: Get sales report (admin)
+      security:
+        - AdminBearer: []
+      parameters:
+        - in: query
+          name: from
+          schema: { type: string, format: date }
+        - in: query
+          name: to
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Sales report
+
+  /orders/assign:
+    post:
+      tags: [Orders]
+      summary: Assign delivery boy to order (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [order_id, delivery_boy_id]
+              properties:
+                order_id: { type: integer }
+                delivery_boy_id: { type: integer }
+      responses:
+        "200":
+          description: Assigned
+
+  /orders/delivery:
+    get:
+      tags: [Orders]
+      summary: Get delivery orders (admin)
+      security:
+        - AdminBearer: []
+      responses:
+        "200":
+          description: Delivery orders
+
+  /delivery-boys:
+    get:
+      tags: [Orders]
+      summary: Get delivery boys list (admin)
+      security:
+        - AdminBearer: []
+      responses:
+        "200":
+          description: Delivery boys
+
+  # ──────────────────────────────────────────
+  # DELIVERY ADDRESS
+  # ──────────────────────────────────────────
+
+  /address/add:
+    post:
+      tags: [Delivery Address]
+      summary: Add delivery address (user)
+      security:
+        - UserBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, phone, address, pincode_id]
+              properties:
+                name: { type: string }
+                phone: { type: string }
+                address: { type: string }
+                city: { type: string }
+                state: { type: string }
+                pincode_id: { type: integer }
+      responses:
+        "200":
+          description: Address added
+
+  /address:
+    post:
+      tags: [Delivery Address]
+      summary: Get user addresses
+      security:
+        - UserBearer: []
+      responses:
+        "200":
+          description: Address list
+
+  /address/edit:
+    post:
+      tags: [Delivery Address]
+      summary: Edit address (user)
+      security:
+        - UserBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: integer }
+                name: { type: string }
+                phone: { type: string }
+                address: { type: string }
+      responses:
+        "200":
+          description: Address updated
+
+  /address/delete:
+    post:
+      tags: [Delivery Address]
+      summary: Delete address (user)
+      security:
+        - UserBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: integer }
+      responses:
+        "200":
+          description: Deleted
+
+  # ──────────────────────────────────────────
+  # COUPONS
+  # ──────────────────────────────────────────
+
+  /coupons:
+    get:
+      tags: [Coupons]
+      summary: Get active coupons (public)
+      responses:
+        "200":
+          description: Coupon list
+
+  /coupons/validate:
+    get:
+      tags: [Coupons]
+      summary: Validate coupon code
+      parameters:
+        - in: query
+          name: code
+          required: true
+          schema: { type: string }
+        - in: query
+          name: amount
+          schema: { type: number }
+      responses:
+        "200":
+          description: Validation result
+
+  /admin/coupons:
+    get:
+      tags: [Coupons]
+      summary: Get all coupons (admin)
+      security:
+        - AdminBearer: []
+      responses:
+        "200":
+          description: All coupons
+
+  /coupons/add:
+    post:
+      tags: [Coupons]
+      summary: Add coupon (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, discount_type, discount_value]
+              properties:
+                code: { type: string }
+                discount_type: { type: string, enum: [flat, percent] }
+                discount_value: { type: number }
+                min_order: { type: number }
+                max_discount: { type: number }
+                expires_at: { type: string, format: date }
+      responses:
+        "200":
+          description: Coupon added
+
+  /coupons/delete:
+    post:
+      tags: [Coupons]
+      summary: Delete coupon (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: integer }
+      responses:
+        "200":
+          description: Deleted
+
+  # ──────────────────────────────────────────
+  # SETTINGS
+  # ──────────────────────────────────────────
+
+  /settings/delivery-charge:
+    get:
+      tags: [Settings]
+      summary: Get delivery charge
+      responses:
+        "200":
+          description: Value
+    post:
+      tags: [Settings]
+      summary: Update delivery charge (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value: { type: number }
+      responses:
+        "200":
+          description: Updated
+
+  /settings/free-delivery:
+    get:
+      tags: [Settings]
+      summary: Get free delivery threshold
+      responses:
+        "200":
+          description: Value
+    post:
+      tags: [Settings]
+      summary: Update free delivery threshold (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value: { type: number }
+      responses:
+        "200":
+          description: Updated
+
+  /settings/handling-charge:
+    get:
+      tags: [Settings]
+      summary: Get handling charge
+      responses:
+        "200":
+          description: Value
+    post:
+      tags: [Settings]
+      summary: Update handling charge (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value: { type: number }
+      responses:
+        "200":
+          description: Updated
+
+  /settings/delivery-time:
+    get:
+      tags: [Settings]
+      summary: Get delivery time
+      responses:
+        "200":
+          description: Value
+    post:
+      tags: [Settings]
+      summary: Update delivery time (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value: { type: string }
+      responses:
+        "200":
+          description: Updated
+
+  /settings/min-order:
+    get:
+      tags: [Settings]
+      summary: Get minimum order amount
+      responses:
+        "200":
+          description: Value
+    post:
+      tags: [Settings]
+      summary: Update minimum order amount (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value: { type: number }
+      responses:
+        "200":
+          description: Updated
+
+  # ──────────────────────────────────────────
+  # HELP
+  # ──────────────────────────────────────────
+
+  /help/call:
+    get:
+      tags: [Help]
+      summary: Get support phone number
+      responses:
+        "200":
+          description: Phone
+    post:
+      tags: [Help]
+      summary: Update support phone (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value: { type: string }
+      responses:
+        "200":
+          description: Updated
+
+  /help/email:
+    get:
+      tags: [Help]
+      summary: Get support email
+      responses:
+        "200":
+          description: Email
+    post:
+      tags: [Help]
+      summary: Update support email (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value: { type: string }
+      responses:
+        "200":
+          description: Updated
+
+  /help/whatsapp:
+    get:
+      tags: [Help]
+      summary: Get WhatsApp number
+      responses:
+        "200":
+          description: Number
+    post:
+      tags: [Help]
+      summary: Update WhatsApp number (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value: { type: string }
+      responses:
+        "200":
+          description: Updated
+
+  # ──────────────────────────────────────────
+  # LOCATION
+  # ──────────────────────────────────────────
+
+  /location/districts:
+    get:
+      tags: [Location]
+      summary: Get all districts
+      responses:
+        "200":
+          description: District list
+
+  /location/cities:
+    post:
+      tags: [Location]
+      summary: Get cities by district
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [district_id]
+              properties:
+                district_id: { type: integer }
+      responses:
+        "200":
+          description: City list
+
+  /location/districts/add:
+    post:
+      tags: [Location]
+      summary: Add district (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        "200":
+          description: Added
+
+  /location/districts/update:
+    post:
+      tags: [Location]
+      summary: Update district (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, name]
+              properties:
+                id: { type: integer }
+                name: { type: string }
+      responses:
+        "200":
+          description: Updated
+
+  /location/districts/delete:
+    post:
+      tags: [Location]
+      summary: Delete district (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: integer }
+      responses:
+        "200":
+          description: Deleted
+
+  /location/cities/add:
+    post:
+      tags: [Location]
+      summary: Add city (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, district_id]
+              properties:
+                name: { type: string }
+                district_id: { type: integer }
+      responses:
+        "200":
+          description: Added
+
+  /location/cities/update:
+    post:
+      tags: [Location]
+      summary: Update city (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, name]
+              properties:
+                id: { type: integer }
+                name: { type: string }
+      responses:
+        "200":
+          description: Updated
+
+  /location/cities/delete:
+    post:
+      tags: [Location]
+      summary: Delete city (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: integer }
+      responses:
+        "200":
+          description: Deleted
+
+  # ──────────────────────────────────────────
+  # PINCODES
+  # ──────────────────────────────────────────
+
+  /pincodes:
+    get:
+      tags: [Pincodes]
+      summary: Get active pincodes (public)
+      responses:
+        "200":
+          description: Pincode list
+
+  /pincodes/check:
+    get:
+      tags: [Pincodes]
+      summary: Check if a pincode is serviceable
+      parameters:
+        - in: query
+          name: code
+          required: true
+          schema: { type: string, example: "400001" }
+      responses:
+        "200":
+          description: Serviceable or not
+
+  /admin/pincodes:
+    get:
+      tags: [Admin — Pincodes]
+      summary: Get all pincodes (admin)
+      security:
+        - AdminBearer: []
+      responses:
+        "200":
+          description: All pincodes
+
+  /admin/pincodes/add:
+    post:
+      tags: [Admin — Pincodes]
+      summary: Add pincode (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, area_name]
+              properties:
+                code: { type: string }
+                area_name: { type: string }
+                city: { type: string }
+                state: { type: string }
+      responses:
+        "200":
+          description: Added
+
+  /admin/pincodes/add-bulk:
+    post:
+      tags: [Admin — Pincodes]
+      summary: Bulk add pincodes (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pincodes]
+              properties:
+                pincodes:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      code: { type: string }
+                      area_name: { type: string }
+                      city: { type: string }
+      responses:
+        "200":
+          description: Bulk added
+
+  /admin/pincodes/edit:
+    post:
+      tags: [Admin — Pincodes]
+      summary: Edit pincode (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: integer }
+                code: { type: string }
+                area_name: { type: string }
+                city: { type: string }
+      responses:
+        "200":
+          description: Updated
+
+  /admin/pincodes/toggle:
+    post:
+      tags: [Admin — Pincodes]
+      summary: Toggle pincode active/inactive (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: integer }
+      responses:
+        "200":
+          description: Toggled
+
+  /admin/pincodes/delete:
+    post:
+      tags: [Admin — Pincodes]
+      summary: Delete pincode (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: integer }
+      responses:
+        "200":
+          description: Deleted
+
+  # ──────────────────────────────────────────
+  # SUBSCRIPTION PLANS
+  # ──────────────────────────────────────────
+
+  /subscription-plans:
+    get:
+      tags: [Subscription Plans]
+      summary: Get active subscription plans (public)
+      responses:
+        "200":
+          description: Plan list
+
+  /admin/subscription-plans:
+    get:
+      tags: [Admin — Subscription Plans]
+      summary: Get all subscription plans (admin)
+      security:
+        - AdminBearer: []
+      responses:
+        "200":
+          description: All plans
+
+  /admin/subscription-plans/add:
+    post:
+      tags: [Admin — Subscription Plans]
+      summary: Add subscription plan (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, price, duration_days]
+              properties:
+                name: { type: string }
+                price: { type: number }
+                duration_days: { type: integer }
+                features: { type: string }
+      responses:
+        "200":
+          description: Added
+
+  /admin/subscription-plans/edit:
+    post:
+      tags: [Admin — Subscription Plans]
+      summary: Edit subscription plan (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: integer }
+                name: { type: string }
+                price: { type: number }
+                duration_days: { type: integer }
+      responses:
+        "200":
+          description: Updated
+
+  /admin/subscription-plans/delete:
+    post:
+      tags: [Admin — Subscription Plans]
+      summary: Delete plan (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: integer }
+      responses:
+        "200":
+          description: Deleted
+
+  /admin/subscription-plans/toggle:
+    post:
+      tags: [Admin — Subscription Plans]
+      summary: Toggle plan active/inactive (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: integer }
+      responses:
+        "200":
+          description: Toggled
+
+  /admin/subscriptions/grant:
+    post:
+      tags: [Admin — Subscription Plans]
+      summary: Manually grant subscription to vendor (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vendor_id, plan_id]
+              properties:
+                vendor_id: { type: integer }
+                plan_id: { type: integer }
+      responses:
+        "200":
+          description: Subscription granted
+
+  # ──────────────────────────────────────────
+  # ADMIN
+  # ──────────────────────────────────────────
+
+  /admin/login:
+    post:
+      tags: [Admin]
+      summary: Admin login — returns Bearer token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, example: "admin@shopq.com" }
+                password: { type: string, example: "password" }
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  token: { type: string }
+                  admin: { type: object }
+        "401":
+          description: Invalid credentials
+
+  /admin/logout:
+    post:
+      tags: [Admin]
+      summary: Admin logout
+      security:
+        - AdminBearer: []
+      responses:
+        "200":
+          description: Logged out
+
+  /admin/me:
+    get:
+      tags: [Admin]
+      summary: Get current admin info
+      security:
+        - AdminBearer: []
+      responses:
+        "200":
+          description: Admin profile
+
+  /auth/all-users:
+    get:
+      tags: [Admin]
+      summary: Get all users (admin)
+      security:
+        - AdminBearer: []
+      responses:
+        "200":
+          description: User list
+
+  /auth/user-status:
+    post:
+      tags: [Admin]
+      summary: Toggle user active/banned (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id]
+              properties:
+                user_id: { type: integer }
+                is_active: { type: integer, enum: [0, 1] }
+      responses:
+        "200":
+          description: Status updated
+
+  # ──────────────────────────────────────────
+  # ADMIN — VENDORS
+  # ──────────────────────────────────────────
+
+  /admin/vendors:
+    get:
+      tags: [Admin — Vendors]
+      summary: Get all vendors (admin)
+      security:
+        - AdminBearer: []
+      responses:
+        "200":
+          description: Vendor list
+
+  /admin/vendors/stats:
+    get:
+      tags: [Admin — Vendors]
+      summary: Vendor statistics (admin)
+      security:
+        - AdminBearer: []
+      responses:
+        "200":
+          description: Vendor stats
+
+  /admin/vendors/{id}:
+    get:
+      tags: [Admin — Vendors]
+      summary: Get vendor by ID (admin)
+      security:
+        - AdminBearer: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Vendor detail
+
+  /admin/vendors/approve:
+    post:
+      tags: [Admin — Vendors]
+      summary: Approve vendor (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vendor_id]
+              properties:
+                vendor_id: { type: integer }
+      responses:
+        "200":
+          description: Approved
+
+  /admin/vendors/reject:
+    post:
+      tags: [Admin — Vendors]
+      summary: Reject vendor (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vendor_id]
+              properties:
+                vendor_id: { type: integer }
+                reason: { type: string }
+      responses:
+        "200":
+          description: Rejected
+
+  /admin/vendors/suspend:
+    post:
+      tags: [Admin — Vendors]
+      summary: Suspend vendor (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vendor_id]
+              properties:
+                vendor_id: { type: integer }
+      responses:
+        "200":
+          description: Suspended
+
+  /admin/vendors/delete:
+    post:
+      tags: [Admin — Vendors]
+      summary: Delete vendor (admin)
+      security:
+        - AdminBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vendor_id]
+              properties:
+                vendor_id: { type: integer }
+      responses:
+        "200":
+          description: Deleted
+
+  # ──────────────────────────────────────────
+  # VENDOR AUTH
+  # ──────────────────────────────────────────
+
+  /vendor/register:
+    post:
+      tags: [Vendor Auth]
+      summary: Register vendor (public)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password, phone, shop_name]
+              properties:
+                name: { type: string }
+                email: { type: string }
+                password: { type: string }
+                phone: { type: string }
+                shop_name: { type: string }
+                address: { type: string }
+      responses:
+        "200":
+          description: Registered, pending approval
+
+  /vendor/login:
+    post:
+      tags: [Vendor Auth]
+      summary: Vendor login — returns Bearer token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  token: { type: string }
+                  vendor: { type: object }
+
+  /vendor/logout:
+    post:
+      tags: [Vendor Auth]
+      summary: Vendor logout
+      security:
+        - VendorBearer: []
+      responses:
+        "200":
+          description: Logged out
+
+  /vendor/profile:
+    get:
+      tags: [Vendor Auth]
+      summary: Get vendor profile
+      security:
+        - VendorBearer: []
+      responses:
+        "200":
+          description: Vendor profile
+
+  /vendor/profile/update:
+    post:
+      tags: [Vendor Auth]
+      summary: Update vendor profile
+      security:
+        - VendorBearer: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                phone: { type: string }
+                shop_name: { type: string }
+                address: { type: string }
+                logo: { type: string, format: binary }
+      responses:
+        "200":
+          description: Profile updated
+
+  /vendor/change-password:
+    post:
+      tags: [Vendor Auth]
+      summary: Change vendor password
+      security:
+        - VendorBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, new_password]
+              properties:
+                current_password: { type: string }
+                new_password: { type: string }
+      responses:
+        "200":
+          description: Password changed
+
+  # ──────────────────────────────────────────
+  # VENDOR PRODUCTS
+  # ──────────────────────────────────────────
+
+  /vendor/products:
+    get:
+      tags: [Vendor Products]
+      summary: Get vendor's products
+      security:
+        - VendorBearer: []
+      responses:
+        "200":
+          description: Product list
+
+  /vendor/products/insert:
+    post:
+      tags: [Vendor Products]
+      summary: Add product (vendor)
+      security:
+        - VendorBearer: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [name, price]
+              properties:
+                name: { type: string }
+                price: { type: number }
+                sale_price: { type: number }
+                stock: { type: integer }
+                category_id: { type: integer }
+                image: { type: string, format: binary }
+      responses:
+        "200":
+          description: Product added
+
+  /vendor/products/update:
+    post:
+      tags: [Vendor Products]
+      summary: Update product (vendor)
+      security:
+        - VendorBearer: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: integer }
+                name: { type: string }
+                price: { type: number }
+      responses:
+        "200":
+          description: Updated
+
+  /vendor/products/delete:
+    post:
+      tags: [Vendor Products]
+      summary: Delete product (vendor)
+      security:
+        - VendorBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: integer }
+      responses:
+        "200":
+          description: Deleted
+
+  /vendor/products/upload-image:
+    post:
+      tags: [Vendor Products]
+      summary: Upload product image (vendor)
+      security:
+        - VendorBearer: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [id, image]
+              properties:
+                id: { type: integer }
+                image: { type: string, format: binary }
+      responses:
+        "200":
+          description: Image uploaded
+
+  /vendor/products/update-stock:
+    post:
+      tags: [Vendor Products]
+      summary: Update product stock (vendor)
+      security:
+        - VendorBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, stock]
+              properties:
+                id: { type: integer }
+                stock: { type: integer }
+      responses:
+        "200":
+          description: Stock updated
+
+  /vendor/products/update-type:
+    post:
+      tags: [Vendor Products]
+      summary: Update product type (vendor)
+      security:
+        - VendorBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, type_id]
+              properties:
+                id: { type: integer }
+                type_id: { type: integer }
+      responses:
+        "200":
+          description: Updated
+
+  /vendor/products/variant:
+    post:
+      tags: [Vendor Products]
+      summary: Save product variant (vendor)
+      security:
+        - VendorBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [product_id]
+              properties:
+                product_id: { type: integer }
+                variants: { type: array, items: { type: object } }
+      responses:
+        "200":
+          description: Saved
+
+  /vendor/products/highlight:
+    post:
+      tags: [Vendor Products]
+      summary: Save product highlights (vendor)
+      security:
+        - VendorBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [product_id]
+              properties:
+                product_id: { type: integer }
+                highlights: { type: array, items: { type: string } }
+      responses:
+        "200":
+          description: Saved
+
+  /vendor/products/info:
+    post:
+      tags: [Vendor Products]
+      summary: Save product info (vendor)
+      security:
+        - VendorBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [product_id]
+              properties:
+                product_id: { type: integer }
+                info: { type: array, items: { type: object } }
+      responses:
+        "200":
+          description: Saved
+
+  /vendor/orders:
+    get:
+      tags: [Vendor Products]
+      summary: Get orders for vendor's products
+      security:
+        - VendorBearer: []
+      responses:
+        "200":
+          description: Vendor orders
+
+  # ──────────────────────────────────────────
+  # VENDOR PINCODES & SUBSCRIPTION
+  # ──────────────────────────────────────────
+
+  /vendor/pincodes:
+    get:
+      tags: [Vendor Auth]
+      summary: Get vendor's selected service pincodes
+      security:
+        - VendorBearer: []
+      responses:
+        "200":
+          description: Selected pincodes with all pincodes list
+
+  /vendor/pincodes/update:
+    post:
+      tags: [Vendor Auth]
+      summary: Update vendor's service pincodes
+      security:
+        - VendorBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pincode_ids]
+              properties:
+                pincode_ids:
+                  type: array
+                  items: { type: integer }
+      responses:
+        "200":
+          description: Pincodes updated
+
+  /vendor/subscription:
+    get:
+      tags: [Vendor Auth]
+      summary: Get vendor's current subscription
+      security:
+        - VendorBearer: []
+      responses:
+        "200":
+          description: Subscription info
+
+  /vendor/subscribe:
+    post:
+      tags: [Vendor Auth]
+      summary: Subscribe to a plan (vendor)
+      security:
+        - VendorBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plan_id]
+              properties:
+                plan_id: { type: integer }
+      responses:
+        "200":
+          description: Subscribed

@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ShopQ API Docs</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui.min.css" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: sans-serif; background: #fafafa; }
+
+    #top-bar {
+      background: #1a1a2e;
+      color: #fff;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    #top-bar h1 {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    #top-bar span {
+      font-size: 12px;
+      background: #16213e;
+      padding: 3px 10px;
+      border-radius: 20px;
+      color: #a0aec0;
+    }
+
+    #server-bar {
+      background: #fff;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 10px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    #server-bar label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #4a5568;
+    }
+    #server-input {
+      border: 1px solid #cbd5e0;
+      border-radius: 6px;
+      padding: 5px 10px;
+      font-size: 13px;
+      width: 280px;
+      outline: none;
+    }
+    #server-input:focus { border-color: #667eea; }
+    #apply-btn {
+      background: #667eea;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 6px 16px;
+      font-size: 13px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    #apply-btn:hover { background: #5a67d8; }
+
+    /* Swagger UI tweaks */
+    .swagger-ui .topbar { display: none; }
+    .swagger-ui .info { margin: 20px 0 10px; }
+    #swagger-ui { padding-bottom: 60px; }
+  </style>
+</head>
+<body>
+
+<div id="top-bar">
+  <h1>🛒 ShopQ API</h1>
+  <span>OpenAPI 3.0</span>
+</div>
+
+<div id="server-bar">
+  <label>Server:</label>
+  <input id="server-input" type="text" value="http://192.168.1.7:8000/api" placeholder="http://192.168.1.7:8000/api" />
+  <button id="apply-btn" onclick="applyServer()">Apply</button>
+  <span style="font-size:12px;color:#718096;">Change this if your IP/port differs, then click Apply.</span>
+</div>
+
+<div id="swagger-ui"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui-bundle.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.17.14/swagger-ui-standalone-preset.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+
+<script>
+  let ui;
+
+  async function loadSpec(serverUrl) {
+    // Fetch the YAML from the same directory
+    const res = await fetch('./openapi.yaml?_=' + Date.now());
+    const yamlText = await res.text();
+    const spec = jsyaml.load(yamlText);
+
+    // Override server URL dynamically
+    spec.servers = [{ url: serverUrl, description: 'Active server' }];
+
+    return spec;
+  }
+
+  async function initUI(serverUrl) {
+    const spec = await loadSpec(serverUrl);
+
+    ui = SwaggerUIBundle({
+      spec,
+      dom_id: '#swagger-ui',
+      deepLinking: true,
+      presets: [
+        SwaggerUIBundle.presets.apis,
+        SwaggerUIStandalonePreset,
+      ],
+      layout: 'StandaloneLayout',
+      persistAuthorization: true,
+      displayRequestDuration: true,
+      filter: true,
+      syntaxHighlight: { activate: true, theme: 'agate' },
+    });
+  }
+
+  async function applyServer() {
+    const url = document.getElementById('server-input').value.trim();
+    if (!url) return;
+    document.getElementById('swagger-ui').innerHTML = '';
+    await initUI(url);
+  }
+
+  // Boot — default server URL = same origin as this page (avoids CORS)
+  window.onload = async () => {
+    const saved = localStorage.getItem('shopq_swagger_server');
+    const autoUrl = window.location.origin + '/api';
+    const url = saved || autoUrl;
+    document.getElementById('server-input').value = url;
+    localStorage.setItem('shopq_swagger_server', url);
+    await initUI(url);
+  };
+
+  // Save on change
+  document.getElementById('server-input')?.addEventListener('change', () => {
+    localStorage.setItem('shopq_swagger_server', document.getElementById('server-input').value);
+  });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,323 @@
+﻿import 'package:shopq/core/network/api_client.dart';
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+
+import 'dart:convert';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:shopq/modules/cart/views/cart_screen.dart';
+import 'package:shopq/core/widgets/product_card.dart';
+import 'package:shopq/modules/home/widgets/skeletons.dart';
+import 'package:shopq/modules/product/views/search_screen.dart';
+import 'package:shopq/core/network/api_endpoints.dart';
+import 'package:shopq/app/theme/app_colors.dart';
+
+class SimilarProduct extends StatefulWidget {
+  final String category_id;
+  final String category_name;
+
+  const SimilarProduct({super.key, required this.category_id, required this.category_name});
+
+  @override
+  State<SimilarProduct> createState() => _SimilarProductState();
+}
+
+class _SimilarProductState extends State<SimilarProduct> {
+  List products = [];
+  bool _isLoadingProducts = false;
+  List<Map<String, dynamic>> cartList = [];
+
+  String userEmail = "";
+  String userName = "";
+  String userID = "";
+
+  @override
+  void initState() {
+    super.initState();
+    fetchUserData();
+    fetchAllProductsFromCategory(widget.category_id);
+  }
+
+  Future<void> fetchUserData() async {
+    final info = await ApiHelper.getUserInfo();
+    if (info['id']!.isNotEmpty && mounted) {
+      setState(() {
+        userEmail = info['email']!;
+        userName = info['name']!;
+        userID = info['id']!;
+      });
+      fetchCartQuantity(userID);
+    }
+  }
+
+  /// ✅ Cart quantity fetch
+  Future<void> fetchCartQuantity(String id) async {
+    final url = Uri.parse('${ApiConstants.GET_CART_ITEMS}?user_id=$id');
+    try {
+      final response = await ApiHelper.get(url.toString(), auth: true);
+      final data = jsonDecode(response.body);
+
+      if (data['success']) {
+        final cartItems = List<Map<String, dynamic>>.from(data['cart'] ?? []);
+        setState(() {
+          cartList = cartItems;
+        });
+      } else {
+        setState(() {
+          cartList = [];
+        });
+      }
+    } catch (e) {
+      setState(() {
+        cartList = [];
+      });
+    }
+  }
+
+  /// ✅ Products fetch
+  Future<void> fetchAllProductsFromCategory(String id) async {
+    setState(() {
+      _isLoadingProducts = true;
+      products = [];
+    });
+
+    final url = Uri.parse(
+      '${ApiConstants.VIEW_ALL_PRODUCTS_BY_CATEGORY}?category_id=$id',
+    );
+
+    try {
+      final res = await ApiHelper.get(url.toString());
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+
+        setState(() {
+          if (data is List) {
+            products = data;
+          } else if (data['products'] != null) {
+            products = data['products'];
+          } else {
+            products = [];
+          }
+        });
+      } else {
+        setState(() => products = []);
+      }
+    } catch (e) {
+      setState(() => products = []);
+    } finally {
+      setState(() => _isLoadingProducts = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.backgroundColor,
+      body: Stack(
+        children: [
+          Column(
+            children: [
+              SizedBox(height: 20.h),
+
+              // ✅ Top AppBar
+              buildAppBar(),
+
+              SizedBox(height: 20.h),
+
+              // ✅ Products Grid
+              if (_isLoadingProducts)
+                const Expanded(child: ProductGridSkeleton(count: 6, crossAxisCount: 2))
+              else if (products.isNotEmpty)
+                Expanded(child: buildSection(products)),
+            ],
+          ),
+
+          // ✅ Floating Cart Button (Only show if cartList is not empty)
+          if (cartList.isNotEmpty)
+            AnimatedPositioned(
+              duration: Duration(milliseconds: 300),
+              curve: Curves.slowMiddle,
+              bottom: cartList.isNotEmpty ? 40.h : -100.h, // Hide below screen
+              left: 110.w,
+              right: 110.w,
+              child: AnimatedOpacity(
+                duration: Duration(milliseconds: 300),
+                opacity: cartList.isNotEmpty ? 1.0 : 0.0, // Fade in/out
+                child: InkWell(
+                  onTap: () {
+                    Get.to(() => CartScreen());
+                  },
+                  child: Container(
+                    height: 38.h,
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryColor, // Transparent color
+                      borderRadius: BorderRadius.circular(30.r),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.15),
+                          blurRadius: 8,
+                          offset: Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 30,
+                            height: 30,
+                            decoration: BoxDecoration(
+                              color: AppColors.gray,
+                              borderRadius: BorderRadius.circular(50.r),
+                            ),
+                            child: Center(
+                              child: Text(
+                                cartList.length.toString(),
+                                style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14.sp,
+                                ),
+                              ),
+                            ),
+                          ),
+                          Spacer(),
+                          Text(
+                            "View Cart",
+                            style: GoogleFonts.jost(
+                              fontSize: 15.sp,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primaryTextColor,
+                            ),
+                          ),
+                          Spacer(),
+                          Icon(
+                            Icons.arrow_forward_ios_outlined,
+                            color: AppColors.iconColor,
+                            size: 16.sp,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// ✅ Top AppBar extracted for clarity
+  Widget buildAppBar() {
+    return Container(
+      width: double.infinity,
+      height: 60.h,
+      decoration: BoxDecoration(
+        color: AppColors.backgroundColor,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            offset: Offset(0, 4),
+            blurRadius: 6,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: EdgeInsets.only(top: 10.h),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            SizedBox(width: 16.w),
+            InkWell(
+              onTap: () {
+                Navigator.pop(context);
+              },
+              child: Container(
+                height: 25.h,
+                width: 28.w,
+                decoration: BoxDecoration(
+                  color: AppColors.primaryColor,
+                  borderRadius: BorderRadius.circular(100),
+                ),
+                child: Center(
+                  child: Padding(
+                    padding: EdgeInsets.only(left: 7.w),
+                    child: Icon(
+                      Icons.arrow_back_ios,
+                      color: AppColors.iconColor,
+                      size: 15.sp,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(width: 16.w),
+            Text(
+              "Similar Product",
+              style: GoogleFonts.jost(
+                fontSize: 17.sp,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primaryTextColor,
+              ),
+            ),
+            Spacer(),
+            InkWell(
+              onTap: () {
+                Get.to(() => SearchProduct());
+              },
+              child: Container(
+                height: 25.h,
+                width: 28.w,
+                decoration: BoxDecoration(
+                  color: AppColors.primaryColor,
+                  borderRadius: BorderRadius.circular(100),
+                ),
+                child: Center(
+                  child: Padding(
+                    padding: EdgeInsets.only(left: 1.w),
+                    child: Icon(
+                      Icons.search,
+                      color: AppColors.iconColor,
+                      size: 15.sp,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(width: 16.w),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// ✅ Grid Section
+  Widget buildSection(List<dynamic> list) {
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 16.w),
+      child: GridView.builder(
+        padding: EdgeInsets.zero,
+        physics: const BouncingScrollPhysics(),
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          crossAxisSpacing: 12.w,
+          mainAxisSpacing: 12.h,
+          childAspectRatio: 0.38,
+        ),
+        itemCount: list.length,
+        itemBuilder: (context, index) {
+          final product = list[index];
+          return ProductCard(
+            product: product,
+            userId: userID,
+            onCartUpdated: () {
+              fetchCartQuantity(userID);
+            },
+          );
+        },
+      ),
+    );
+  }
+}

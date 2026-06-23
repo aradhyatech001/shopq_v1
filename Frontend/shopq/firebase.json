@@ -1,0 +1,22 @@
+{
+    "flutter": {
+        "platforms": {
+            "android": {
+                "default": {
+                    "projectId": "shopq-multi-vendor",
+                    "appId": "1:411644656998:android:2faa7201daf7f4194d9ca7",
+                    "fileOutput": "android/app/google-services.json"
+                }
+            },
+            "dart": {
+                "lib/firebase_options.dart": {
+                    "projectId": "shopq-multi-vendor",
+                    "configurations": {
+                        "android": "1:411644656998:android:2faa7201daf7f4194d9ca7",
+                        "ios": "1:411644656998:ios:ba3fe07ad41310c24d9ca7"
+                    }
+                }
+            }
+        }
+    }
+}

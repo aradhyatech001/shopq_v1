@@ -1,0 +1,10 @@
+# flutter pub run flutter_launcher_icons
+flutter_launcher_icons:
+  image_path: "assets/images/shopqicon.png"
+
+
+  web:
+    generate: true
+    image_path: "assets/images/shopqicon.png"
+    background_color: "#hexcode"
+    theme_color: "#hexcode"
