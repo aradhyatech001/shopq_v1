@@ -29,4 +29,5 @@ abstract class AppRoutes {
   static const privacyPolicy  = '/privacy-policy';
   static const returnPolicy   = '/return-policy';
   static const terms          = '/terms';
+  static const notifications  = '/notifications';
 }

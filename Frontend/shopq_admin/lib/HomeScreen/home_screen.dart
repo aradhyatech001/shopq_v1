@@ -13,6 +13,8 @@ import '../DeliveryBoys/delivery_boys_screen.dart';
 import '../HomeTabManagement/home_tab_screen.dart';
 // import '../LocationScreen/locationManagementScreen.dart';
 import '../MainCategory/main_category.dart';
+import '../Brands/brand_management_screen.dart';
+import '../Notifications/notification_campaign_screen.dart';
 import '../Order/order_management_screen.dart';
 import '../Pincodes/pincode_screen.dart';
 import '../Product/product_management_screen.dart';
@@ -74,6 +76,11 @@ final List<_MenuItem> _menuItems = [
     screen: const ProductTypeScreen(),
   ),
   _MenuItem(
+    icon: Icons.sell_rounded,
+    label: 'Brands',
+    screen: const BrandManagementScreen(),
+  ),
+  _MenuItem(
     icon: Icons.image_rounded,
     label: 'Banners',
     screen: const BannerManagementScreen(),
@@ -90,6 +97,12 @@ final List<_MenuItem> _menuItems = [
     screen: const CouponCodeScreen(),
   ),
   _MenuItem(
+    icon: Icons.campaign_rounded,
+    label: 'Notifications',
+    screen: const NotificationCampaignScreen(),
+    groupHeader: 'ENGAGEMENT',
+  ),
+  _MenuItem(
     icon: Icons.receipt_long_rounded,
     label: 'Orders',
     screen: const OrderManagementScreen(),
@@ -100,16 +113,16 @@ final List<_MenuItem> _menuItems = [
     label: 'Stock',
     screen: const StockManagementScreen(),
   ),
-  _MenuItem(
-    icon: Icons.assignment_return_rounded,
-    label: 'Refunds',
-    screen: const RefundManagementScreen(),
-  ),
-  _MenuItem(
-    icon: Icons.account_balance_wallet_rounded,
-    label: 'Payouts',
-    screen: const PayoutManagementScreen(),
-  ),
+  // _MenuItem(
+  //   icon: Icons.assignment_return_rounded,
+  //   label: 'Refunds',
+  //   screen: const RefundManagementScreen(),
+  // ),
+  // _MenuItem(
+  //   icon: Icons.account_balance_wallet_rounded,
+  //   label: 'Payouts',
+  //   screen: const PayoutManagementScreen(),
+  // ),
   _MenuItem(
     icon: Icons.people_rounded,
     label: 'Users',

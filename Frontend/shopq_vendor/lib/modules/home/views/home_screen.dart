@@ -15,7 +15,8 @@ import '../../pincode/views/pincode_screen.dart';
 import '../../subscription/views/subscription_screen.dart';
 import '../../profile/views/profile_screen.dart';
 import '../../delivery/views/delivery_boys_screen.dart';
-import '../../payouts/views/payout_history_screen.dart';
+import '../controllers/home_controller.dart';
+// import '../../payouts/views/payout_history_screen.dart';
 
 class _MenuItem {
   final IconData? icon;
@@ -39,8 +40,29 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  // Tab index is driven by HomeController so notification deep links can switch
+  // the bottom-nav tab from anywhere (instead of pushing a fresh screen).
+  final HomeController _nav = Get.isRegistered<HomeController>()
+      ? Get.find<HomeController>()
+      : Get.put(HomeController());
+  late final Worker _navWorker;
   int _selectedIndex = 0;
   bool _sidebarExpanded = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedIndex = _nav.selectedIndex.value;
+    _navWorker = ever(_nav.selectedIndex, (int i) {
+      if (mounted) setState(() => _selectedIndex = i);
+    });
+  }
+
+  @override
+  void dispose() {
+    _navWorker.dispose();
+    super.dispose();
+  }
 
   final List<Widget> _screens = const [
     DashboardScreen(),
@@ -50,7 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
     SubscriptionScreen(),
     ProfileScreen(),
     DeliveryBoysScreen(),    // index 6 — appended so the mobile bottom-nav stays intact
-    PayoutHistoryScreen(),   // index 7
+    // PayoutHistoryScreen(),   // index 7
   ];
 
   static const List<_MenuItem> _menuItems = [
@@ -60,7 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _MenuItem(icon: Icons.inventory_2_outlined,            label: 'Products',       screenIndex: 1),
     _MenuItem(label: 'OPERATIONS', isGroupHeader: true),
     _MenuItem(icon: Icons.receipt_long_outlined,           label: 'Orders',         screenIndex: 2),
-    _MenuItem(icon: Icons.account_balance_wallet_outlined, label: 'Payouts',        screenIndex: 7),
+    // _MenuItem(icon: Icons.account_balance_wallet_outlined, label: 'Payouts',        screenIndex: 7),
     _MenuItem(label: 'DELIVERY', isGroupHeader: true),
     _MenuItem(icon: Icons.location_on_outlined,            label: 'Pincodes',       screenIndex: 3),
     _MenuItem(icon: Icons.delivery_dining_rounded,         label: 'Delivery Boys',  screenIndex: 6),
@@ -69,7 +91,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _MenuItem(icon: Icons.person_outline_rounded,          label: 'Profile',        screenIndex: 5),
   ];
 
-  void _select(int index) => setState(() => _selectedIndex = index);
+  void _select(int index) => _nav.navigateTo(index);
 
   void _logout() async {
     try {

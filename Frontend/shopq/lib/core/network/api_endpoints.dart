@@ -5,10 +5,10 @@ class ApiEndpoints {
   // iOS Simulator     → http://localhost:8000/api  (works on iOS only)
   // Run: ipconfig (Windows) or ifconfig (Mac/Linux) to find your WiFi IP
   // ─────────────────────────────────────────────────────────────────────────
-  static const String BASE_URL = "http://192.168.1.6:8000/api";
-  static const String BASE_IMAGE_URL = "http://192.168.1.6:8000/storage/";
-  // static const String BASE_URL = "https://shopq.solarsunshakti.com/api";
-  // static const String BASE_IMAGE_URL = "https://shopq.solarsunshakti.com/storage/";
+  // static const String BASE_URL = "http://192.168.1.6:8000/api";
+  // static const String BASE_IMAGE_URL = "http://192.168.1.6:8000/storage/";
+  static const String BASE_URL = "https://shopq.solarsunshakti.com/api";
+  static const String BASE_IMAGE_URL = "https://shopq.solarsunshakti.com/storage/";
   // static const String BASE_URL = "http://localhost:8000/api";
   // static const String BASE_IMAGE_URL = "http://localhost:8000/storage/";
 
@@ -22,6 +22,15 @@ class ApiEndpoints {
   static const String GET_USER = "$BASE_URL/auth/user";
   static const String EDIT_PROFILE = "$BASE_URL/auth/edit-profile";
   static const String FCM_TOKEN    = "$BASE_URL/fcm/token";
+
+  // ── Notification Center ───────────────────────────────────────────────────
+  static const String NOTIFICATIONS          = "$BASE_URL/notifications";
+  static const String NOTIFICATIONS_UNREAD   = "$BASE_URL/notifications/unread-count";
+  static const String NOTIFICATIONS_READ_ALL = "$BASE_URL/notifications/read-all";
+  static String notificationRead(int id)     => "$BASE_URL/notifications/$id/read";
+  static String notificationArchive(int id)  => "$BASE_URL/notifications/$id/archive";
+  static String notificationClicked(int id)  => "$BASE_URL/notifications/$id/clicked";
+  static String notificationDelete(int id)   => "$BASE_URL/notifications/$id";
 
   // ── Admin ─────────────────────────────────────────
   static const String ADMIN_LOGIN = "$BASE_URL/admin/login";
@@ -71,6 +80,8 @@ class ApiEndpoints {
 
   // ── Brand ─────────────────────────────────────────
   static const String VIEW_BRAND = "$BASE_URL/brand";
+  static const String BRANDS = "$BASE_URL/brands";
+  static String brandProducts(int id) => "$BASE_URL/brands/$id/products";
 
   // ── Cart ──────────────────────────────────────────
   static const String ADD_TO_CART = "$BASE_URL/cart/add";

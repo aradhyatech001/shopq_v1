@@ -72,13 +72,15 @@ class OrderStatusService
         $parent = Order::find($vo->parent_order_id);
         if ($parent && $parent->user_id) {
             $user = User::find($parent->user_id);
-            if ($user && $user->fcm_token) {
+            if ($user) {
                 $label = ucwords(str_replace('_', ' ', $to));
-                app(FcmService::class)->send(
-                    $user->fcm_token,
+                app(NotificationService::class)->notify(
+                    $user,
+                    'order_update',
                     'Order Update',
                     "Your order #{$parent->id} is now: {$label}.",
-                    ['order_id' => (string) $parent->id, 'status' => $to]
+                    ['order_id' => (string) $parent->id, 'status' => $to,
+                     'deeplink' => "shopq://order/{$parent->id}"]
                 );
             }
         }

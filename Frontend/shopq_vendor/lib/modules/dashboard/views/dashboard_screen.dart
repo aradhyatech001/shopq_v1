@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../../app/routes/app_routes.dart';
+import '../../notifications/controllers/notification_controller.dart';
 import '../../../core/network/api_endpoints.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../core/utils/responsive.dart';
@@ -119,6 +122,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  NotificationController get _notif =>
+      Get.isRegistered<NotificationController>()
+          ? Get.find<NotificationController>()
+          : Get.put(NotificationController(), permanent: true);
+
+  Widget _notificationBell() {
+    return GestureDetector(
+      onTap: () {
+        _notif.fetch();
+        Get.toNamed(AppRoutes.notifications);
+      },
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 6.w),
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            Icon(Icons.notifications_rounded,
+                size: 22.sp, color: AppColors.textSecondary),
+            Obx(() {
+              final n = _notif.unread.value;
+              if (n == 0) return const SizedBox.shrink();
+              return Positioned(
+                right: -4.w,
+                top: -4.h,
+                child: Container(
+                  padding: EdgeInsets.all(2.w),
+                  constraints: BoxConstraints(minWidth: 14.w, minHeight: 14.w),
+                  decoration:
+                      const BoxDecoration(color: AppColors.error, shape: BoxShape.circle),
+                  child: Text(n > 9 ? '9+' : '$n',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.jost(
+                          color: Colors.white,
+                          fontSize: 8.sp,
+                          fontWeight: FontWeight.bold)),
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final byStatus =
@@ -136,6 +184,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       title: 'Dashboard',
       subtitle: 'Welcome back, $_vendorName',
       actions: [
+        _notificationBell(),
         IconButton(
           tooltip: 'Refresh',
           onPressed: _fetch,

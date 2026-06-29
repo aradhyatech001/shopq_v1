@@ -17,7 +17,9 @@ class CartController extends Controller
         $productId = (int) $request->input('product_id', 0);
         $variantId = $request->filled('variant_id') ? (int) $request->input('variant_id') : null;
         $quantity  = max(1, (int) $request->input('quantity', 1));
-        $imageUrl  = $request->input('image_url');
+        // Store a host-independent relative path, never the full URL the client
+        // happened to load (which bakes in an IP/domain and breaks on change).
+        $imageUrl  = $this->relativeImagePath($request->input('image_url'));
 
         if (!$productId) {
             return response()->json(['success' => false, 'message' => 'Missing product_id']);
@@ -58,6 +60,12 @@ class CartController extends Controller
             LEFT JOIN product_variants v ON v.id = c.variant_id
             WHERE c.user_id = ?
         ", [$userId]);
+
+        // Build a full URL for the CURRENT host from the stored relative path.
+        // Also repairs legacy rows that still hold an absolute URL.
+        foreach ($cart as $row) {
+            $row->image_url = $this->imageUrl($row->image_url);
+        }
 
         return response()->json(['success' => true, 'cart' => $cart]);
     }

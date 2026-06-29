@@ -122,6 +122,18 @@ class PayoutController extends Controller
             'paid_at'   => now()->toDateTimeString(),
         ]);
 
+        // Notify the vendor their settlement was paid (push + inbox).
+        $vendor = \App\Models\Vendor::find($payout->vendor_id);
+        if ($vendor) {
+            app(\App\Services\NotificationService::class)->notify(
+                $vendor,
+                'settlement_update',
+                'Settlement paid',
+                '₹' . number_format((float) $payout->amount, 2) . ' has been paid to you.',
+                ['payout_id' => (string) $payout->id, 'deeplink' => 'shopq://payout'],
+            );
+        }
+
         return response()->json(['success' => true, 'message' => 'Payout marked as paid']);
     }
 

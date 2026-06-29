@@ -15,6 +15,7 @@ import '../../modules/wishlist/bindings/wishlist_binding.dart';
 import '../../modules/profile/bindings/profile_binding.dart';
 import '../../modules/address/bindings/address_binding.dart';
 import '../../modules/settings/bindings/settings_binding.dart';
+import '../../modules/notifications/views/notification_center_screen.dart';
 
 // Views — Splash
 import '../../modules/splash/views/splash_screen.dart';
@@ -268,6 +269,10 @@ abstract class AppPages {
       name: AppRoutes.refunds,
       page: () => const MyRefundsScreen(),
       binding: SettingsBinding(),
+    ),
+    GetPage(
+      name: AppRoutes.notifications,
+      page: () => const NotificationCenterScreen(),
     ),
   ];
 }

@@ -69,6 +69,9 @@ class VendorProductController extends Controller
         if ($subId) {
             $createData['subcategory_id'] = $subId;
         }
+        if (!empty($data['brand_id'])) {
+            $createData['brand_id'] = $data['brand_id'];
+        }
 
         $product = Product::create($createData);
 
@@ -97,6 +100,9 @@ class VendorProductController extends Controller
 
         if (isset($data['subcategory_id'])) {
             $updateData['subcategory_id'] = $data['subcategory_id'];
+        }
+        if (array_key_exists('brand_id', $data)) {
+            $updateData['brand_id'] = $data['brand_id'] ?: null;
         }
 
         $product->update($updateData);
@@ -157,15 +163,13 @@ class VendorProductController extends Controller
     /// New images are uploaded separately via uploadImage(); this only prunes.
     private function syncImages(int $productId, array $images): void
     {
-        // Normalise incoming entries to relative storage paths.
-        $incoming = array_map(function ($u) {
-            $u = (string) $u;
-            foreach (['/api/files/', '/storage/'] as $marker) {
-                $pos = strpos($u, $marker);
-                if ($pos !== false) return substr($u, $pos + strlen($marker));
-            }
-            return ltrim($u, '/');
-        }, $images);
+        // Reduce each submitted URL to a relative storage path (host-agnostic),
+        // so existing images are kept and only the ones the vendor actually
+        // removed get deleted.
+        $incoming = array_values(array_filter(array_map(
+            fn($u) => $this->relativeImagePath($u),
+            $images
+        )));
 
         $existing = ProductImage::where('product_id', $productId)->pluck('image_url')->toArray();
         foreach (array_diff($existing, $incoming) as $url) {
@@ -528,6 +532,18 @@ class VendorProductController extends Controller
         app(\App\Services\OrderStatusService::class)
             ->setVendorOrderStatus($vo, 'assigned', 'vendor', $vendor->id, "Assigned delivery boy #$deliveryBoyId");
 
+        // Notify the delivery boy of the new assignment.
+        $rider = \App\Models\DeliveryBoy::find($deliveryBoyId);
+        if ($rider) {
+            app(\App\Services\NotificationService::class)->notify(
+                $rider,
+                'new_assignment',
+                'New delivery assigned',
+                "Order #{$vo->parent_order_id} has been assigned to you.",
+                ['order_id' => (string) $vo->parent_order_id, 'deeplink' => 'shopq://order'],
+            );
+        }
+
         return response()->json(['success' => true, 'message' => 'Delivery boy assigned']);
     }
 
@@ -600,6 +616,7 @@ class VendorProductController extends Controller
             'description'      => $p->description,
             'main_category_id' => $p->main_category_id,
             'subcategory_id'   => $p->subcategory_id,
+            'brand_id'         => $p->brand_id,
             'category_name'    => $p->category?->name,
             'types'            => $p->types,
             'is_active'        => $p->is_active,

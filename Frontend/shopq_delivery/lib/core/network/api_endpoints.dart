@@ -1,12 +1,19 @@
 class ApiEndpoints {
-  static const String BASE_URL = "http://192.168.1.6:8000/api";
-  static const String BASE_IMAGE_URL = "http://192.168.1.6:8000/storage/";
-  // static const String BASE_URL = "https://shopq.solarsunshakti.com/api";
-  // static const String BASE_IMAGE_URL = "https://shopq.solarsunshakti.com/storage/";
+  // static const String BASE_URL = "http://192.168.1.6:8000/api";
+  // static const String BASE_IMAGE_URL = "http://192.168.1.6:8000/storage/";
+  static const String BASE_URL = "https://shopq.solarsunshakti.com/api";
+  static const String BASE_IMAGE_URL = "https://shopq.solarsunshakti.com/storage/";
 
   static const String LOGIN          = "$BASE_URL/delivery/login";
   static const String LOGOUT            = "$BASE_URL/delivery/logout";
   static const String DELIVERY_FCM_TOKEN = "$BASE_URL/delivery/fcm/token";
+
+  // ── Notification Center (delivery) ────────────────────────────────────────
+  static const String NOTIFICATIONS          = "$BASE_URL/delivery/notifications";
+  static const String NOTIFICATIONS_UNREAD   = "$BASE_URL/delivery/notifications/unread-count";
+  static const String NOTIFICATIONS_READ_ALL = "$BASE_URL/delivery/notifications/read-all";
+  static String notificationRead(int id)     => "$BASE_URL/delivery/notifications/$id/read";
+  static String notificationArchive(int id)  => "$BASE_URL/delivery/notifications/$id/archive";
   static const String PROFILE        = "$BASE_URL/delivery/profile";
   static const String ORDERS         = "$BASE_URL/delivery/orders";
   static const String UPDATE_STATUS  = "$BASE_URL/delivery/orders/update-status";

@@ -27,6 +27,8 @@ use App\Http\Controllers\DeliveryController;
 use App\Http\Controllers\RefundController;
 use App\Http\Controllers\PayoutController;
 use App\Http\Controllers\FcmController;
+use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\CampaignController;
 
 // ─────────────────────────────────────────────
 // PUBLIC ROUTES
@@ -53,6 +55,10 @@ Route::get('/banners',                [BannerController::class, 'view']);
 Route::get('/categories',             [CategoryController::class, 'view']);
 Route::get('/categories/subcategories', [CategoryController::class, 'getSubcategories']);
 Route::get('/brand',                  [CategoryController::class, 'view']);
+
+// ── Brands (real brands table) ────────────────────────────────────────────
+Route::get('/brands',                 [App\Http\Controllers\BrandController::class, 'index']);
+Route::get('/brands/{id}/products',   [App\Http\Controllers\BrandController::class, 'products'])->where('id', '[0-9]+');
 
 // Coupons (read)
 Route::get('/coupons',                [CouponController::class, 'view']);
@@ -139,6 +145,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/auth/logout',           [AuthController::class, 'logout']);
     Route::post('/auth/edit-profile',     [AuthController::class, 'editProfile']);
     Route::post('/fcm/token',             [FcmController::class, 'updateToken']);
+
+    // Notification Center (customer)
+    Route::get('/notifications',                  [NotificationController::class, 'index']);
+    Route::get('/notifications/unread-count',      [NotificationController::class, 'unreadCount']);
+    Route::post('/notifications/read-all',         [NotificationController::class, 'markAllRead']);
+    Route::post('/notifications/{id}/read',        [NotificationController::class, 'markRead']);
+    Route::post('/notifications/{id}/archive',     [NotificationController::class, 'archive']);
+    Route::post('/notifications/{id}/opened',      [NotificationController::class, 'opened']);
+    Route::post('/notifications/{id}/clicked',     [NotificationController::class, 'clicked']);
+    Route::delete('/notifications/{id}',           [NotificationController::class, 'destroy']);
     // Authenticated user profile lookup (replaces the public /auth/user endpoint).
     // Returns only id + name — no status or registration date.
     Route::get('/auth/user',              [AuthController::class, 'getUser']);
@@ -191,6 +207,26 @@ Route::middleware('auth:admin')->group(function () {
 
     Route::post('/admin/logout',      [AdminController::class, 'logout']);
     Route::get('/admin/me',           [AdminController::class, 'me']);
+
+    // ── Notification Campaigns ────────────────────────────────────────────
+    // ── Brands ────────────────────────────────────────────────────────────
+    Route::get('/admin/brands',          [App\Http\Controllers\BrandController::class, 'adminIndex']);
+    Route::post('/admin/brands/add',     [App\Http\Controllers\BrandController::class, 'add']);
+    Route::post('/admin/brands/edit',    [App\Http\Controllers\BrandController::class, 'edit']);
+    Route::post('/admin/brands/toggle',  [App\Http\Controllers\BrandController::class, 'toggle']);
+    Route::post('/admin/brands/reorder', [App\Http\Controllers\BrandController::class, 'reorder']);
+    Route::post('/admin/brands/delete',  [App\Http\Controllers\BrandController::class, 'delete']);
+
+    Route::get('/admin/campaigns',                  [CampaignController::class, 'index']);
+    Route::post('/admin/campaigns',                 [CampaignController::class, 'store']);
+    Route::post('/admin/campaigns/preview-audience',[CampaignController::class, 'preview']);
+    Route::get('/admin/campaigns/{id}',             [CampaignController::class, 'show']);
+    Route::post('/admin/campaigns/{id}',            [CampaignController::class, 'update']);
+    Route::post('/admin/campaigns/{id}/duplicate',  [CampaignController::class, 'duplicate']);
+    Route::delete('/admin/campaigns/{id}',          [CampaignController::class, 'destroy']);
+    Route::post('/admin/campaigns/{id}/send',       [CampaignController::class, 'send']);
+    Route::post('/admin/campaigns/{id}/cancel',     [CampaignController::class, 'cancel']);
+    Route::post('/admin/user-stats/rebuild',        [CampaignController::class, 'rebuildStats']);
 
     // App config / theme (write)
     Route::post('/admin/app-config',  [AppConfigController::class, 'update']);
@@ -339,6 +375,16 @@ Route::middleware('auth:vendor')->group(function () {
 
     Route::post('/vendor/logout',            [VendorAuthController::class, 'logout']);
     Route::post('/vendor/fcm/token',         [FcmController::class, 'updateToken']);
+
+    // Notification Center (vendor)
+    Route::get('/vendor/notifications',              [NotificationController::class, 'index']);
+    Route::get('/vendor/notifications/unread-count', [NotificationController::class, 'unreadCount']);
+    Route::post('/vendor/notifications/read-all',    [NotificationController::class, 'markAllRead']);
+    Route::post('/vendor/notifications/{id}/read',   [NotificationController::class, 'markRead']);
+    Route::post('/vendor/notifications/{id}/archive',[NotificationController::class, 'archive']);
+    Route::post('/vendor/notifications/{id}/opened', [NotificationController::class, 'opened']);
+    Route::post('/vendor/notifications/{id}/clicked',[NotificationController::class, 'clicked']);
+    Route::delete('/vendor/notifications/{id}',      [NotificationController::class, 'destroy']);
     Route::get('/vendor/profile',            [VendorAuthController::class, 'profile']);
     Route::post('/vendor/profile/update',    [VendorAuthController::class, 'updateProfile']);
     Route::post('/vendor/change-password',   [VendorAuthController::class, 'changePassword']);
@@ -383,6 +429,16 @@ Route::middleware('auth:vendor')->group(function () {
 Route::middleware('auth:delivery')->group(function () {
     Route::post('/delivery/logout',               [DeliveryController::class, 'logout']);
     Route::post('/delivery/fcm/token',            [FcmController::class, 'updateToken']);
+
+    // Notification Center (delivery)
+    Route::get('/delivery/notifications',              [NotificationController::class, 'index']);
+    Route::get('/delivery/notifications/unread-count', [NotificationController::class, 'unreadCount']);
+    Route::post('/delivery/notifications/read-all',    [NotificationController::class, 'markAllRead']);
+    Route::post('/delivery/notifications/{id}/read',   [NotificationController::class, 'markRead']);
+    Route::post('/delivery/notifications/{id}/archive',[NotificationController::class, 'archive']);
+    Route::post('/delivery/notifications/{id}/opened', [NotificationController::class, 'opened']);
+    Route::post('/delivery/notifications/{id}/clicked',[NotificationController::class, 'clicked']);
+    Route::delete('/delivery/notifications/{id}',      [NotificationController::class, 'destroy']);
     Route::get('/delivery/profile',               [DeliveryController::class, 'profile']);
     Route::get('/delivery/orders',                [DeliveryController::class, 'orders']);
     Route::post('/delivery/orders/update-status', [DeliveryController::class, 'updateStatus']);

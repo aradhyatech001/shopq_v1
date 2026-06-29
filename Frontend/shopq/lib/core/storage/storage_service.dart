@@ -1,5 +1,7 @@
 import 'package:get_storage/get_storage.dart';
 
+import 'cache_service.dart';
+
 /// Synchronous key-value store backed by GetStorage.
 class StorageService {
   static final _box = GetStorage();
@@ -27,6 +29,12 @@ class StorageService {
 
   static String get pincodeCode => _box.read<String>('pincode_code') ?? '';
   static set pincodeCode(String v) => _box.write('pincode_code', v);
+
+  /// Last FCM pincode-topic we subscribed to (so we can unsubscribe on change).
+  static String get subscribedPincode =>
+      _box.read<String>('subscribed_pincode') ?? '';
+  static set subscribedPincode(String v) =>
+      _box.write('subscribed_pincode', v);
 
   static String get pincodeAreaName =>
       _box.read<String>('pincode_area_name') ?? '';
@@ -56,6 +64,9 @@ class StorageService {
     _box.remove('user_id');
     _box.remove('user_name');
     _box.remove('user_email');
+    // Drop cached API responses so the next user never sees the previous
+    // user's data. Covers every logout path (all route through clearAuth).
+    CacheService.clear();
   }
 
   static void clearAll() => _box.erase();

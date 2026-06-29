@@ -1,16 +1,23 @@
 class ApiEndpoints {
-  static const String BASE_URL       = "http://192.168.1.6:8000/api";
-  static const String BASE_IMAGE_URL = "http://192.168.1.6:8000/storage/";
+  // static const String BASE_URL       = "http://192.168.1.6:8000/api";
+  // static const String BASE_IMAGE_URL = "http://192.168.1.6:8000/storage/";
   // static const String BASE_URL       = "http://localhost:8000/api";
   // static const String BASE_IMAGE_URL = "http://localhost:8000/storage/";
-  // static const String BASE_URL       = "https://shopq.solarsunshakti.com/api";
-  // static const String BASE_IMAGE_URL = "https://shopq.solarsunshakti.com/storage/";
+  static const String BASE_URL       = "https://shopq.solarsunshakti.com/api";
+  static const String BASE_IMAGE_URL = "https://shopq.solarsunshakti.com/storage/";
 
   // ── Vendor Auth ────────────────────────────────────
   static const String VENDOR_REGISTER       = "$BASE_URL/vendor/register";
   static const String VENDOR_LOGIN          = "$BASE_URL/vendor/login";
   static const String VENDOR_LOGOUT         = "$BASE_URL/vendor/logout";
   static const String VENDOR_FCM_TOKEN      = "$BASE_URL/vendor/fcm/token";
+
+  // ── Notification Center (vendor) ──────────────────────────────────────────
+  static const String NOTIFICATIONS          = "$BASE_URL/vendor/notifications";
+  static const String NOTIFICATIONS_UNREAD   = "$BASE_URL/vendor/notifications/unread-count";
+  static const String NOTIFICATIONS_READ_ALL = "$BASE_URL/vendor/notifications/read-all";
+  static String notificationRead(int id)     => "$BASE_URL/vendor/notifications/$id/read";
+  static String notificationArchive(int id)  => "$BASE_URL/vendor/notifications/$id/archive";
   static const String VENDOR_PROFILE        = "$BASE_URL/vendor/profile";
   static const String VENDOR_PROFILE_UPDATE   = "$BASE_URL/vendor/profile/update";
   static const String VENDOR_CHANGE_PASSWORD  = "$BASE_URL/vendor/change-password";
@@ -55,6 +62,7 @@ class ApiEndpoints {
   static const String CATEGORIES            = "$BASE_URL/categories";
   static const String SUBCATEGORIES         = "$BASE_URL/categories/subcategories";
   static const String PRODUCT_TYPES         = "$BASE_URL/product-types";
+  static const String BRANDS                = "$BASE_URL/brands";
 
   // ── Image URL resolver ────────────────────────────
   /// Turns any image value from the API into a loadable absolute URL.

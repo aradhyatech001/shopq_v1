@@ -28,8 +28,10 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
 
   String? _selectedCatId;
   String? _selectedSubCatId;
+  String? _selectedBrandId;
   List _subCats = [];
   List _mainCats = [];
+  List _brands = [];
   List<String> _typeOptions = [];
   List<String> _selectedTypes = [];
 
@@ -69,6 +71,7 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
     _fetchProducts();
     _fetchMainCats();
     _fetchTypes();
+    _fetchBrands();
     _addVariant();
     _addInfo();
     _addHighlight();
@@ -216,6 +219,16 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
     } catch (_) {}
   }
 
+  Future<void> _fetchBrands() async {
+    try {
+      final res = await AdminApi.get(Uri.parse(ApiConstants.BRANDS_ALL));
+      final data = jsonDecode(res.body);
+      if (data['success'] == true && mounted) {
+        setState(() => _brands = data['data'] ?? []);
+      }
+    } catch (_) {}
+  }
+
   Future<void> _saveHandler() async {
     if (_nameCtrl.text.isEmpty || _selectedCatId == null) {
       _snack('Fill product name and category', AppColors.warningColor);
@@ -239,6 +252,7 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
       'description': _descCtrl.text.trim(),
       'main_category_id': _selectedCatId,
       if (_selectedSubCatId != null) 'subcategory_id': _selectedSubCatId,
+      if (_selectedBrandId != null) 'brand_id': _selectedBrandId,
       'types': _selectedTypes.join(','),
       'images': _uploadedUrls,
     };
@@ -295,6 +309,7 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
       'description': _descCtrl.text.trim(),
       'main_category_id': _selectedCatId,
       if (_selectedSubCatId != null) 'subcategory_id': _selectedSubCatId,
+      if (_selectedBrandId != null) 'brand_id': _selectedBrandId,
       'types': _selectedTypes.join(','),
       'images': _uploadedUrls,
       'variants': variants,
@@ -425,6 +440,7 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
       _descCtrl.text = p['description'] ?? '';
       _selectedCatId = p['main_category_id']?.toString();
       _selectedSubCatId = p['subcategory_id']?.toString();
+      _selectedBrandId = p['brand_id']?.toString();
       if (_selectedCatId != null) _fetchSubCats(_selectedCatId!);
 
       // Variants
@@ -508,6 +524,7 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
       _editingProd = null;
       _selectedCatId = null;
       _selectedSubCatId = null;
+      _selectedBrandId = null;
       _subCats.clear();
       _selectedTypes.clear();
       _nameCtrl.clear();
@@ -782,6 +799,10 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
         _subCats.any((s) => s['id'].toString() == _selectedSubCatId)
         ? _selectedSubCatId
         : null;
+    final validBrandId =
+        _brands.any((b) => b['id'].toString() == _selectedBrandId)
+        ? _selectedBrandId
+        : null;
 
     return SectionCard(
       title: _editingProd == null ? 'Add Product' : 'Edit Product',
@@ -858,6 +879,28 @@ class _ProductManagementScreenState extends State<ProductManagementScreen> {
                 )
                 .toList(),
             onChanged: (v) => setState(() => _selectedSubCatId = v),
+          ),
+          SizedBox(height: 12.h),
+
+          // Brand
+          const FormLabel('Brand'),
+          _dropdown(
+            value: validBrandId,
+            hint: 'Select brand (optional)',
+            items: [
+              const DropdownMenuItem<String>(
+                  value: null, child: Text('No brand')),
+              ..._brands.map(
+                (b) => DropdownMenuItem<String>(
+                  value: b['id'].toString(),
+                  child: Text(
+                    b['name'] ?? '',
+                    style: GoogleFonts.jost(fontSize: 13.sp),
+                  ),
+                ),
+              ),
+            ],
+            onChanged: (v) => setState(() => _selectedBrandId = v),
           ),
           SizedBox(height: 14.h),
 

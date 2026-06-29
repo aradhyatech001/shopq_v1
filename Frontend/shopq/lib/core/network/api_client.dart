@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:pretty_dio_logger/pretty_dio_logger.dart';
 
+import '../storage/cache_service.dart';
 import '../storage/storage_service.dart';
 import 'api_endpoints.dart';
 
@@ -102,6 +103,62 @@ class ApiClient {
     final finalUrl = pincode ? withPincode(url) : url;
     final response = await instance.get(finalUrl);
     return ApiResponse(response.data, response.statusCode ?? 0);
+  }
+
+  /// In-flight GET requests keyed by URL, so simultaneous callers for the same
+  /// endpoint share one network round-trip (request de-duplication).
+  static final Map<String, Future<ApiResponse>> _inflight = {};
+
+  /// Cache-first GET. Returns cached data while it's younger than [ttl] (no
+  /// network hit); otherwise fetches, caches the result, and returns it. On a
+  /// network/non-200 failure it falls back to stale cache if available.
+  ///
+  /// Pass [forceRefresh] (e.g. from pull-to-refresh) to bypass the cache and
+  /// always hit the network, refreshing the stored copy.
+  static Future<ApiResponse> getCached(
+    String url, {
+    required Duration ttl,
+    bool pincode = false,
+    bool forceRefresh = false,
+  }) async {
+    final finalUrl = pincode ? withPincode(url) : url;
+    final key = 'GET:$finalUrl';
+
+    if (!forceRefresh && CacheService.isFresh(key, ttl)) {
+      final cached = CacheService.read(key);
+      if (cached != null) return ApiResponse(cached, 200);
+    }
+
+    final existing = _inflight[key];
+    if (existing != null) return existing;
+
+    final future = _fetchAndCache(key, finalUrl);
+    _inflight[key] = future;
+    try {
+      return await future;
+    } finally {
+      _inflight.remove(key);
+    }
+  }
+
+  static Future<ApiResponse> _fetchAndCache(String key, String finalUrl) async {
+    try {
+      final response = await instance.get(finalUrl);
+      final code = response.statusCode ?? 0;
+      if (code == 200 && response.data != null) {
+        CacheService.write(key, response.data);
+        return ApiResponse(response.data, code);
+      }
+      // Non-200: prefer stale cache over surfacing an error response.
+      final stale = CacheService.read(key);
+      if (stale != null) return ApiResponse(stale, 200);
+      return ApiResponse(response.data, code);
+    } catch (e) {
+      // Network failure: serve stale data if we have any, else rethrow.
+      final stale = CacheService.read(key);
+      if (stale != null) return ApiResponse(stale, 200);
+      rethrow;
+    }
   }
 
   static Future<ApiResponse> post(

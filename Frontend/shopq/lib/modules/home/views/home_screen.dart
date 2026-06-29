@@ -12,6 +12,12 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shopq/modules/category/views/category_view_screen.dart';
 import 'package:shopq/core/widgets/product_card.dart';
+import 'package:shopq/core/widgets/category_section.dart';
+import 'package:shopq/core/widgets/end_of_list_message.dart';
+import 'package:shopq/modules/product/views/products_by_type_screen.dart';
+import 'package:shopq/modules/product/views/brand_products_screen.dart';
+import 'package:shopq/modules/notifications/controllers/notification_controller.dart';
+import 'package:shopq/modules/notifications/views/notification_center_screen.dart';
 import 'package:shopq/modules/home/widgets/skeletons.dart';
 import 'package:shopq/modules/home/widgets/motion.dart';
 import 'package:shopq/modules/splash/views/location_screen.dart';
@@ -22,6 +28,7 @@ import 'package:shopq/core/services/app_config_service.dart';
 import 'package:shopq/app/theme/app_colors.dart';
 import 'package:shopq/core/network/api_client.dart';
 import 'package:shopq/core/storage/storage_service.dart';
+import 'package:shopq/core/storage/cache_service.dart';
 import 'package:shopq/modules/cart/views/cart_screen.dart';
 import 'package:shopq/modules/profile/views/profile_screen.dart';
 
@@ -45,6 +52,11 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   // Scroll controller for detecting scroll direction
   final ScrollController _scrollController = ScrollController();
+
+  // Notification Center controller (badge + list). Created on first access.
+  NotificationController get _notif => Get.isRegistered<NotificationController>()
+      ? Get.find<NotificationController>()
+      : Get.put(NotificationController(), permanent: true);
 
   // Data variables
   String deliveryTime = '15 minutes';
@@ -105,35 +117,39 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  Future<void> _loadAllData() async {
-    setState(() => _isLoading = true);
+  /// Loads everything the home needs. [forceRefresh] (pull-to-refresh) bypasses
+  /// the response cache and shows no full-screen spinner — the RefreshIndicator
+  /// shows its own.
+  Future<void> _loadAllData({bool forceRefresh = false}) async {
+    if (!forceRefresh) setState(() => _isLoading = true);
 
     try {
       await Future.wait([
-        // Basic user data
+        // Basic user data (always live).
         fetchUserData(),
-        fetchDeliveryTime(),
+        fetchDeliveryTime(forceRefresh: forceRefresh),
         loadLocation(),
 
-        // Categories and banners
-        _fetchCategories(),
-        _fetchHomeTabs(),
-        _fetchCategoriesWithSubs(),
+        // Categories and banners (cached).
+        _fetchCategories(forceRefresh: forceRefresh),
+        _fetchHomeTabs(forceRefresh: forceRefresh),
+        _fetchCategoriesWithSubs(forceRefresh: forceRefresh),
 
-        _fetchSlider(),
-        _fetchCoupons(),
+        _fetchSlider(forceRefresh: forceRefresh),
+        _fetchCoupons(forceRefresh: forceRefresh),
 
         // Products
-        loadAllTypes(),
+        loadAllTypes(forceRefresh: forceRefresh),
       ]);
       // Load the admin-configured layout for the initially-selected tab.
       if (_homeTabs.isNotEmpty) {
-        await _fetchTabLayout(_homeTabs[_selectedTabIndex]['id']);
+        await _fetchTabLayout(_homeTabs[_selectedTabIndex]['id'],
+            forceRefresh: forceRefresh);
       }
     } catch (e) {
       _showSnackBar("Error loading data: $e", AppColors.errorColor);
     } finally {
-      if (mounted) {
+      if (mounted && !forceRefresh) {
         setState(() => _isLoading = false);
       }
     }
@@ -192,9 +208,10 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  Future<void> fetchDeliveryTime() async {
+  Future<void> fetchDeliveryTime({bool forceRefresh = false}) async {
     try {
-      final response = await ApiClient.get(ApiEndpoints.DELIVERY_TIME);
+      final response = await ApiClient.getCached(ApiEndpoints.DELIVERY_TIME,
+          ttl: CacheTtl.realtime, forceRefresh: forceRefresh);
       final data = jsonDecode(response.body);
       if (data['success']) {
         setState(() => deliveryTime = data['data']['time']);
@@ -204,9 +221,12 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _fetchCategories() async {
+  Future<void> _fetchCategories({bool forceRefresh = false}) async {
     try {
-      final response = await ApiClient.get(ApiEndpoints.MAIN_VIEW_CATEGORY);
+      final response = await ApiClient.getCached(
+          ApiEndpoints.MAIN_VIEW_CATEGORY,
+          ttl: CacheTtl.catalog,
+          forceRefresh: forceRefresh);
       if (response.statusCode == 200) {
         setState(() => _categoryList = jsonDecode(response.body));
       }
@@ -215,9 +235,10 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> loadAllTypes() async {
+  Future<void> loadAllTypes({bool forceRefresh = false}) async {
     try {
-      final res = await ApiClient.get(ApiEndpoints.VIEW_PRODUCT_TYPES);
+      final res = await ApiClient.getCached(ApiEndpoints.VIEW_PRODUCT_TYPES,
+          ttl: CacheTtl.catalog, forceRefresh: forceRefresh);
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
         if (data['success'] == true) {
@@ -230,7 +251,8 @@ class _HomeScreenState extends State<HomeScreen> {
               productTypeSections = {for (var t in _productTypeNames) t: []};
             });
           }
-          await Future.wait(_productTypeNames.map(fetchProductsByType));
+          await Future.wait(_productTypeNames
+          .map((t) => fetchProductsByType(t, forceRefresh: forceRefresh)));
         }
       }
     } catch (e) {
@@ -242,15 +264,19 @@ class _HomeScreenState extends State<HomeScreen> {
           () => productTypeSections = {for (var t in _productTypeNames) t: []},
         );
       }
-      await Future.wait(_productTypeNames.map(fetchProductsByType));
+      await Future.wait(_productTypeNames
+          .map((t) => fetchProductsByType(t, forceRefresh: forceRefresh)));
     }
   }
 
-  Future<void> fetchProductsByType(String type) async {
+  Future<void> fetchProductsByType(String type,
+      {bool forceRefresh = false}) async {
     try {
-      final response = await ApiClient.get(
+      final response = await ApiClient.getCached(
         '${ApiEndpoints.VIEW_PRODUCT_BY_TYPE}?type=$type&page=1&limit=10',
+        ttl: CacheTtl.products,
         pincode: true,
+        forceRefresh: forceRefresh,
       );
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
@@ -263,9 +289,10 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _fetchSlider() async {
+  Future<void> _fetchSlider({bool forceRefresh = false}) async {
     try {
-      final response = await ApiClient.get(ApiEndpoints.VIEW_SLIDER);
+      final response = await ApiClient.getCached(ApiEndpoints.VIEW_SLIDER,
+          ttl: CacheTtl.banners, forceRefresh: forceRefresh);
       if (response.statusCode == 200) {
         final jsonResponse = jsonDecode(response.body);
         if (jsonResponse['success'] == true) {
@@ -277,9 +304,10 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _fetchCoupons() async {
+  Future<void> _fetchCoupons({bool forceRefresh = false}) async {
     try {
-      final response = await ApiClient.get(ApiEndpoints.VIEW_COUPON);
+      final response = await ApiClient.getCached(ApiEndpoints.VIEW_COUPON,
+          ttl: CacheTtl.banners, forceRefresh: forceRefresh);
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
         if (decoded['success'] == true && decoded['data'] is List) {
@@ -294,9 +322,10 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _fetchHomeTabs() async {
+  Future<void> _fetchHomeTabs({bool forceRefresh = false}) async {
     try {
-      final response = await ApiClient.get(ApiEndpoints.HOME_TABS);
+      final response = await ApiClient.getCached(ApiEndpoints.HOME_TABS,
+          ttl: CacheTtl.catalog, forceRefresh: forceRefresh);
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['success'] == true && mounted) {
@@ -311,10 +340,12 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _fetchCategoriesWithSubs() async {
+  Future<void> _fetchCategoriesWithSubs({bool forceRefresh = false}) async {
     try {
-      final res = await ApiClient.get(
+      final res = await ApiClient.getCached(
         '${ApiEndpoints.MAIN_VIEW_CATEGORY}?with_subs=1',
+        ttl: CacheTtl.catalog,
+        forceRefresh: forceRefresh,
       );
       if (res.statusCode == 200 && mounted) {
         final data = jsonDecode(res.body);
@@ -330,18 +361,21 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Loads the admin-configured section layout for a tab (cached per tab).
-  Future<void> _fetchTabLayout(dynamic tabId) async {
+  Future<void> _fetchTabLayout(dynamic tabId,
+      {bool forceRefresh = false}) async {
     final id = tabId is int ? tabId : int.tryParse('$tabId') ?? 0;
     if (id == 0) return;
-    if (_layoutCache.containsKey(id)) {
+    if (!forceRefresh && _layoutCache.containsKey(id)) {
       setState(() => _currentLayout = _layoutCache[id]!);
       return;
     }
     setState(() => _loadingLayout = true);
     try {
-      final res = await ApiClient.get(
+      final res = await ApiClient.getCached(
         '${ApiEndpoints.TAB_LAYOUT}?tab_id=$id',
+        ttl: CacheTtl.products,
         pincode: true,
+        forceRefresh: forceRefresh,
       );
       if (res.statusCode == 200) {
         final data = jsonDecode(res.body);
@@ -705,7 +739,7 @@ class _HomeScreenState extends State<HomeScreen> {
     for (final typeName in orderedTypes) {
       final list = grouped[typeName];
       if (list != null && list.isNotEmpty) {
-        sections.add(_buildTabProductSection(typeName, list, tab));
+        sections.add(_buildTabProductSection(typeName, list, tab, productType: typeName));
       }
     }
     if (untyped.isNotEmpty) {
@@ -714,7 +748,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return sections;
   }
 
-  Widget _buildTabProductSection(String title, List products, Map<String, dynamic> tab) {
+  Widget _buildTabProductSection(String title, List products, Map<String, dynamic> tab, {String? productType}) {
     final categoryId = tab['category_id'] != null
         ? int.tryParse(tab['category_id'].toString()) ?? 0
         : 0;
@@ -728,10 +762,12 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               Text(title, style: GoogleFonts.jost(fontSize: 15.sp, fontWeight: FontWeight.bold)),
               GestureDetector(
-                onTap: () => Get.to(() => CategoryViewScreen(
-                      categoryId: categoryId,
-                      categoryName: tab['name']?.toString() ?? '',
-                    )),
+                onTap: () => (productType != null && productType.isNotEmpty)
+                    ? Get.to(() => ProductsByTypeScreen(type: productType))
+                    : Get.to(() => CategoryViewScreen(
+                          categoryId: categoryId,
+                          categoryName: tab['name']?.toString() ?? '',
+                        )),
                 child: Row(
                   children: [
                     Text('View All', style: GoogleFonts.jost(fontSize: 12.sp, color: AppColors.primaryColor, fontWeight: FontWeight.w600)),
@@ -782,47 +818,18 @@ class _HomeScreenState extends State<HomeScreen> {
         final subs = List<Map<String, dynamic>>.from(cat['subcategories'] as List? ?? []);
         if (subs.isEmpty) continue;
         final catId = int.tryParse(cat['id'].toString()) ?? 0;
-        sections.add(Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: EdgeInsets.fromLTRB(16.w, 16.h, 16.w, 0.h),
-              child: Text(cat['name']?.toString() ?? '', style: GoogleFonts.jost(fontSize: 15.sp, fontWeight: FontWeight.bold)),
-            ),
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12.w),
-              child: GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 4, childAspectRatio: 0.72, crossAxisSpacing: 6.w, mainAxisSpacing: 8.h,
-                ),
-                itemCount: subs.length,
-                itemBuilder: (ctx, i) {
-                  final sub = subs[i];
-                  final subId = int.tryParse(sub['id'].toString());
-                  return GestureDetector(
-                    onTap: () => Get.to(() => CategoryViewScreen(categoryId: catId, categoryName: sub['name']?.toString() ?? '', initialSubCategoryId: subId)),
-                    child: Column(
-                      children: [
-                        Container(
-                          height: 60.h, width: double.infinity,
-                          decoration: BoxDecoration(color: AppColors.primaryColor.withValues(alpha: 0.07), borderRadius: BorderRadius.circular(10.r)),
-                          child: sub['image'] != null && sub['image'].toString().isNotEmpty
-                              ? ClipRRect(borderRadius: BorderRadius.circular(10.r), child: AppNetworkImage(sub['image'].toString(), fit: BoxFit.cover, errorBuilder: (_, _, _) => Icon(Icons.category_outlined, color: AppColors.primaryColor, size: 22.sp)))
-                              : Icon(Icons.category_outlined, color: AppColors.primaryColor, size: 22.sp),
-                        ),
-                        SizedBox(height: 4.h),
-                        Text(sub['name']?.toString() ?? '', textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: GoogleFonts.jost(fontSize: 10.sp, fontWeight: FontWeight.w500)),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-            SizedBox(height: 6.h),
-          ],
+        // Same shared widget as the home category_grid, so the Categories tab
+        // looks identical to the home screen.
+        sections.add(CategorySection(
+          title: cat['name']?.toString() ?? '',
+          items: subs,
+          onItemTap: (sub) => Get.to(() => CategoryViewScreen(
+                categoryId: catId,
+                categoryName: sub['name']?.toString() ?? '',
+                initialSubCategoryId: int.tryParse(sub['id'].toString()),
+              )),
         ));
+        sections.add(SizedBox(height: 6.h));
       }
       return Column(children: sections);
     }
@@ -889,8 +896,12 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: AppColors.backgroundColor,
       body: Stack(
         children: [
-          CustomScrollView(
+          RefreshIndicator(
+            onRefresh: () => _loadAllData(forceRefresh: true),
+            color: AppColors.primaryColor,
+            child: CustomScrollView(
             controller: _scrollController,
+            physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               SliverAppBar(
                 pinned: true,
@@ -899,6 +910,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 backgroundColor: headerColor,
                 systemOverlayStyle: SystemUiOverlayStyle.light,
                 elevation: 0,
+                scrolledUnderElevation: 0,
                 automaticallyImplyLeading: false,
                 flexibleSpace: tabBannerUrl.isNotEmpty
                     ? FlexibleSpaceBar(
@@ -943,6 +955,39 @@ class _HomeScreenState extends State<HomeScreen> {
                           Icon(Icons.location_on_rounded, color: Colors.white, size: 12.sp),
                           SizedBox(width: 3.w),
                           Text(district.isNotEmpty ? district : 'Location', style: GoogleFonts.jost(color: Colors.white, fontSize: 11.sp, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      _notif.fetch();
+                      Get.to(() => const NotificationCenterScreen());
+                    },
+                    child: Container(
+                      margin: EdgeInsets.only(right: 6.w),
+                      padding: EdgeInsets.all(7.w),
+                      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), shape: BoxShape.circle),
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          Icon(Icons.notifications_rounded, color: Colors.white, size: 18.sp),
+                          Obx(() {
+                            final n = _notif.unread.value;
+                            if (n == 0) return const SizedBox.shrink();
+                            return Positioned(
+                              right: -4.w,
+                              top: -4.h,
+                              child: Container(
+                                padding: EdgeInsets.all(2.w),
+                                constraints: BoxConstraints(minWidth: 14.w, minHeight: 14.w),
+                                decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                                child: Text(n > 9 ? '9+' : '$n',
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.jost(color: Colors.white, fontSize: 8.sp, fontWeight: FontWeight.bold)),
+                              ),
+                            );
+                          }),
                         ],
                       ),
                     ),
@@ -1009,8 +1054,18 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                 ),
               ),
+              SliverToBoxAdapter(
+                child: EndOfListMessage(
+                  onButtonTap: () => _scrollController.animateTo(
+                    0,
+                    duration: const Duration(milliseconds: 400),
+                    curve: Curves.easeOut,
+                  ),
+                ),
+              ),
               SliverToBoxAdapter(child: SizedBox(height: 80.h)),
             ],
+          ),
           ),
           if (cartList.isNotEmpty)
             AnimatedPositioned(
@@ -1083,7 +1138,19 @@ class _HomeScreenState extends State<HomeScreen> {
         final title = (s['title']?.toString().isNotEmpty == true)
             ? '${s['title']}${s['emoji'] != null ? ' ${s['emoji']}' : ''}'
             : 'Products';
-        return buildSection(title, products);
+        final pType = s['product_type']?.toString();
+        final catId =
+            int.tryParse('${s['category_id'] ?? s['main_category_id'] ?? ''}');
+        VoidCallback? onViewAll;
+        if (pType != null && pType.isNotEmpty) {
+          onViewAll = () => Get.to(() => ProductsByTypeScreen(type: pType));
+        } else if (catId != null && catId > 0) {
+          onViewAll = () => Get.to(() => CategoryViewScreen(
+                categoryId: catId,
+                categoryName: s['title']?.toString() ?? 'Products',
+              ));
+        }
+        return buildSection(title, products, onViewAll: onViewAll);
       default: return const SizedBox.shrink();
     }
   }
@@ -1132,51 +1199,31 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildLayoutGrid(Map s) {
-    final items = (s['items'] as List?) ?? [];
-    if (items.isEmpty) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if ((s['title']?.toString() ?? '').isNotEmpty)
-          Padding(padding: EdgeInsets.fromLTRB(16.w, 12.h, 16.w, 8.h), child: Text(s['title'], style: GoogleFonts.jost(fontSize: 15.sp, fontWeight: FontWeight.bold))),
-        Padding(
-          padding: EdgeInsets.symmetric(horizontal: 12.w),
-          child: GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 4, childAspectRatio: 0.82, crossAxisSpacing: 8.w, mainAxisSpacing: 10.h),
-            itemCount: items.length,
-            itemBuilder: (ctx, i) {
-              final item = items[i] as Map;
-              final img = item['image']?.toString() ?? '';
-              final isSub = item['is_sub'] == true;
-              final catId = int.tryParse('${item['category_id'] ?? ''}') ?? 0;
-              final subId = isSub ? int.tryParse('${item['id'] ?? ''}') : null;
-              return GestureDetector(
-                onTap: () => Get.to(() => CategoryViewScreen(categoryId: catId, categoryName: item['name']?.toString() ?? '', initialSubCategoryId: subId)),
-                child: Column(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        width: double.infinity,
-                        clipBehavior: Clip.antiAlias,
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryColor.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(10.r),
-                        ),
-                        child: img.isEmpty
-                            ? Icon(Icons.category_outlined, color: AppColors.primaryColor, size: 22.sp)
-                            : SizedBox.expand(child: AppNetworkImage(ApiEndpoints.imageUrl(img), fit: BoxFit.cover)),
-                      ),
-                    ),
-                    Text(item['name']?.toString() ?? '', textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, style: GoogleFonts.jost(fontSize: 10.sp, fontWeight: FontWeight.w500)),
-                  ],
-                ),
-              );
-            },
-          ),
-        ),
-      ],
+    return CategorySection(
+      title: s['title']?.toString() ?? '',
+      emoji: s['emoji']?.toString(),
+      items: (s['items'] as List?) ?? [],
+      onItemTap: (item) {
+        // Brand grid item → open that brand's products.
+        if (item['is_brand'] == true) {
+          final bid = int.tryParse('${item['id'] ?? ''}');
+          if (bid != null) {
+            Get.to(() => BrandProductsScreen(
+                  brandId: bid,
+                  brandName: item['name']?.toString() ?? 'Brand',
+                ));
+            return;
+          }
+        }
+        final isSub = item['is_sub'] == true;
+        final catId = int.tryParse('${item['category_id'] ?? ''}') ?? 0;
+        final subId = isSub ? int.tryParse('${item['id'] ?? ''}') : null;
+        Get.to(() => CategoryViewScreen(
+              categoryId: catId,
+              categoryName: item['name']?.toString() ?? '',
+              initialSubCategoryId: subId,
+            ));
+      },
     );
   }
 
@@ -1410,7 +1457,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final widgets = <Widget>[];
     for (int i = 0; i < sections.length; i++) {
       final e = sections[i];
-      widgets.add(buildSection(e.key, e.value));
+      widgets.add(buildSection(e.key, e.value,
+          onViewAll: () => Get.to(() => ProductsByTypeScreen(type: e.key))));
       final isBreak = (i + 1) % 2 == 0 && i != sections.length - 1;
       if (!isBreak) continue;
       final wantBanner = extraTurn % 2 == 0;
@@ -1484,11 +1532,39 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget buildSection(String title, List<dynamic> list) {
+  Widget buildSection(String title, List<dynamic> list, {VoidCallback? onViewAll}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(padding: EdgeInsets.symmetric(horizontal: 16.w), child: Text(title, style: GoogleFonts.jost(fontSize: 14.sp, fontWeight: FontWeight.bold))),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(title,
+                    style: GoogleFonts.jost(
+                        fontSize: 14.sp, fontWeight: FontWeight.bold)),
+              ),
+              if (onViewAll != null)
+                GestureDetector(
+                  onTap: onViewAll,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('View All',
+                          style: GoogleFonts.jost(
+                              fontSize: 12.sp,
+                              color: AppColors.primaryColor,
+                              fontWeight: FontWeight.w600)),
+                      Icon(Icons.arrow_forward_ios_rounded,
+                          size: 11.sp, color: AppColors.primaryColor),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
         SizedBox(
           height: 220.h,
           child: ListView.builder(

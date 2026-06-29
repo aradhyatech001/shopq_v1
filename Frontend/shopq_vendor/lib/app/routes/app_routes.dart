@@ -11,4 +11,5 @@ abstract class AppRoutes {
   static const payouts      = '/payouts';
   static const pincode      = '/pincode';
   static const subscription = '/subscription';
+  static const notifications = '/notifications';
 }

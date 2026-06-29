@@ -105,15 +105,16 @@ class HomeSectionController extends Controller
                 return ['type' => 'category_grid', 'title' => $s->title, 'items' => $items];
 
             case 'brand_grid':
-                // "Brand-wise shopping" = top-level categories acting as brands.
-                $items = MainCategory::where('is_active', 1)
+                // Real brands (Lux, Parle, Amul, Tata, …). Tapping one opens
+                // that brand's products in the app.
+                $items = \App\Models\Brand::where('is_active', 1)
                     ->orderBy('position')->orderBy('id')
                     ->limit($s->product_limit ?: 12)->get()
-                    ->map(fn($c) => [
-                        'id'          => $c->id,
-                        'name'        => $c->name,
-                        'image'       => $this->imageUrl($c->image),
-                        'category_id' => $c->id,
+                    ->map(fn($b) => [
+                        'id'       => $b->id,
+                        'name'     => $b->name,
+                        'image'    => $this->imageUrl($b->image),
+                        'is_brand' => true,
                     ])->toArray();
                 return ['type' => 'brand_grid', 'title' => $s->title, 'items' => $items];
 

@@ -322,6 +322,7 @@ class _SectionFormState extends State<_SectionForm> {
   int? _subcategoryId;
   List _subcategories = [];
   bool _loadingSubs = false;
+  String? _subError;
   bool _saving = false;
 
   // Banner section now references one or many existing banners.
@@ -341,6 +342,16 @@ class _SectionFormState extends State<_SectionForm> {
 
   // Types that take category/subcategory scope + a product row.
   bool get _isProductRow => _type == 'product_type' || _type == 'products';
+
+  /// Types that expose a category-scope selector (and therefore load the
+  /// matching sub-categories). Product rows scope to a category/subcategory;
+  /// Category Grid renders the scoped category's sub-categories as a grid.
+  bool get _usesCategoryScope => _isProductRow || _type == 'category_grid';
+
+  /// Whether [id] matches one of the loaded categories (defensive — avoids a
+  /// DropdownButton "exactly one item with value" crash on edit).
+  bool _categoryExists(int? id) => widget.categories.any((c) =>
+      (c['id'] is int ? c['id'] : int.tryParse('${c['id']}')) == id);
 
   @override
   void initState() {
@@ -364,24 +375,54 @@ class _SectionFormState extends State<_SectionForm> {
           if (v != null) _selectedBannerIds.add(v);
         }
       }
+      // Guard against stale values no longer in the option lists (a product
+      // type or category that was deleted/renamed) — a Dropdown whose `value`
+      // isn't among its items throws and breaks the whole form.
+      if (_productType != null &&
+          !widget.productTypes.any((t) => t['name']?.toString() == _productType)) {
+        _productType = null;
+      }
+      if (_categoryId != null && !_categoryExists(_categoryId)) {
+        _categoryId = null;
+      }
       if (_categoryId != null) _loadSubcategories(_categoryId!);
     }
   }
 
   Future<void> _loadSubcategories(int categoryId) async {
-    setState(() => _loadingSubs = true);
+    setState(() {
+      _loadingSubs = true;
+      _subError = null;
+    });
     try {
       final res = await AdminApi.get(
           Uri.parse('${ApiConstants.VIEW_SUBCATEGORIES}?parent_id=$categoryId'));
       final data = jsonDecode(res.body);
       if (!mounted) return;
-      final subs = data['success'] == true ? (data['data'] ?? []) : [];
+      if (data['success'] != true) {
+        setState(() {
+          _subcategories = [];
+          _subcategoryId = null;
+          _subError =
+              data['message']?.toString() ?? 'Could not load sub-categories';
+        });
+        return;
+      }
+      final subs = (data['data'] ?? []) as List;
       final ids = subs.map((s) => s['id']).toList();
       setState(() {
         _subcategories = subs;
+        // Drop a stale selection that doesn't belong to the new category.
         if (!ids.contains(_subcategoryId)) _subcategoryId = null;
       });
     } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _subcategories = [];
+        _subcategoryId = null;
+        _subError =
+            'Could not load sub-categories. Check your connection and retry.';
+      });
     } finally {
       if (mounted) setState(() => _loadingSubs = false);
     }
@@ -400,6 +441,12 @@ class _SectionFormState extends State<_SectionForm> {
       widget.snack('Select at least one banner to show');
       return;
     }
+    // A Product-Type Row needs a product type to be meaningful.
+    if (_type == 'product_type' &&
+        (_productType == null || _productType!.isEmpty)) {
+      widget.snack('Please select a product type');
+      return;
+    }
     setState(() => _saving = true);
     try {
       final body = <String, String>{
@@ -409,8 +456,13 @@ class _SectionFormState extends State<_SectionForm> {
         'section_type': _type,
         'product_limit': _limitCtrl.text.trim().isEmpty ? '10' : _limitCtrl.text.trim(),
         if (_type == 'product_type' && _productType != null) 'product_type': _productType!,
-        if (_isProductRow && _categoryId != null) 'main_category_id': '$_categoryId',
-        if (_isProductRow && _subcategoryId != null) 'subcategory_id': '$_subcategoryId',
+        // Category-scope types (product rows + Category Grid) ALWAYS send
+        // main_category_id so the choice persists AND can be cleared back to
+        // "inherit" (backend turns empty into null via `?: null`). Category
+        // Grid renders that category's sub-categories on the storefront.
+        if (_usesCategoryScope) 'main_category_id': _categoryId?.toString() ?? '',
+        // Product rows: send the optional sub-category scope, empty = "all".
+        if (_isProductRow) 'subcategory_id': _subcategoryId?.toString() ?? '',
         if (_type == 'banner') 'banner_ids': jsonEncode(_selectedBannerIds.toList()),
       };
       final url = widget.existing != null
@@ -507,6 +559,7 @@ class _SectionFormState extends State<_SectionForm> {
                       _categoryId = v;
                       _subcategoryId = null;
                       _subcategories = [];
+                      _subError = null;
                     });
                     if (v != null) _loadSubcategories(v);
                   },
@@ -514,30 +567,16 @@ class _SectionFormState extends State<_SectionForm> {
                 SizedBox(height: 12.h),
               ],
 
-              // Subcategory filter for product rows (e.g. Basmati Rice, Fortune, Curd & Yogurt)
-              if (_isProductRow && (_loadingSubs || _subcategories.isNotEmpty)) ...[
-                _label('Subcategory / brand (optional)'),
-                _loadingSubs
-                    ? Padding(
-                        padding: EdgeInsets.symmetric(vertical: 8.h),
-                        child: Row(children: [
-                          SizedBox(width: 14.w, height: 14.w, child: const CircularProgressIndicator(strokeWidth: 2)),
-                          SizedBox(width: 10.w),
-                          Text('Loading…', style: GoogleFonts.jost(fontSize: 12.sp, color: AppColors.secondaryTextColor)),
-                        ]),
-                      )
-                    : DropdownButtonFormField<int>(
-                        value: _subcategoryId,
-                        isExpanded: true,
-                        decoration: _deco(),
-                        items: [
-                          const DropdownMenuItem<int>(value: null, child: Text('All in category')),
-                          ..._subcategories.map<DropdownMenuItem<int>>((s) => DropdownMenuItem(
-                              value: s['id'] is int ? s['id'] : int.tryParse('${s['id']}'),
-                              child: Text(s['name'] ?? '', style: GoogleFonts.jost()))),
-                        ],
-                        onChanged: (v) => setState(() => _subcategoryId = v),
-                      ),
+              // Sub-categories of the selected category. Shown for product rows
+              // (selectable single scope, honoured by the backend) and for the
+              // Category Grid (read-only preview of what the grid will render).
+              if (_usesCategoryScope &&
+                  _categoryId != null &&
+                  (_loadingSubs || _subcategories.isNotEmpty || _subError != null)) ...[
+                _label(_type == 'category_grid'
+                    ? 'Sub-categories shown in this grid'
+                    : 'Subcategory / brand (optional)'),
+                _buildSubcategoryControl(),
                 SizedBox(height: 12.h),
               ],
 
@@ -575,6 +614,86 @@ class _SectionFormState extends State<_SectionForm> {
               ],
             ],
           ),
+    );
+  }
+
+  /// Loading spinner / error+retry / (selectable dropdown for product rows or
+  /// read-only chips for Category Grid) for the scoped category's sub-categories.
+  Widget _buildSubcategoryControl() {
+    if (_loadingSubs) {
+      return Padding(
+        padding: EdgeInsets.symmetric(vertical: 8.h),
+        child: Row(children: [
+          SizedBox(
+              width: 14.w,
+              height: 14.w,
+              child: const CircularProgressIndicator(strokeWidth: 2)),
+          SizedBox(width: 10.w),
+          Text('Loading…',
+              style: GoogleFonts.jost(
+                  fontSize: 12.sp, color: AppColors.secondaryTextColor)),
+        ]),
+      );
+    }
+
+    if (_subError != null) {
+      return Row(
+        children: [
+          Icon(Icons.error_outline, size: 16.sp, color: Colors.red.shade400),
+          SizedBox(width: 8.w),
+          Expanded(
+            child: Text(_subError!,
+                style: GoogleFonts.jost(
+                    fontSize: 12.sp, color: Colors.red.shade400)),
+          ),
+          TextButton(
+            onPressed: _categoryId == null
+                ? null
+                : () => _loadSubcategories(_categoryId!),
+            child: Text('Retry', style: GoogleFonts.jost(fontSize: 12.sp)),
+          ),
+        ],
+      );
+    }
+
+    // Category Grid: the backend renders ALL sub-categories of the scoped
+    // category, so show them as a read-only preview rather than a single-select.
+    if (_type == 'category_grid') {
+      if (_subcategories.isEmpty) {
+        return Text('This category has no sub-categories yet.',
+            style: GoogleFonts.jost(
+                fontSize: 12.sp, color: AppColors.secondaryTextColor));
+      }
+      return Wrap(
+        spacing: 6.w,
+        runSpacing: 6.h,
+        children: _subcategories
+            .map<Widget>((s) => Chip(
+                  label: Text(s['name'] ?? '',
+                      style: GoogleFonts.jost(fontSize: 11.sp)),
+                  backgroundColor:
+                      AppColors.primaryColor.withValues(alpha: 0.08),
+                  side: const BorderSide(color: AppColors.borderColor),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                ))
+            .toList(),
+      );
+    }
+
+    // Product rows: single optional sub-category scope (honoured by backend).
+    return DropdownButtonFormField<int>(
+      value: _subcategoryId,
+      isExpanded: true,
+      decoration: _deco(),
+      items: [
+        const DropdownMenuItem<int>(
+            value: null, child: Text('All in category')),
+        ..._subcategories.map<DropdownMenuItem<int>>((s) => DropdownMenuItem(
+            value: s['id'] is int ? s['id'] : int.tryParse('${s['id']}'),
+            child: Text(s['name'] ?? '', style: GoogleFonts.jost()))),
+      ],
+      onChanged: (v) => setState(() => _subcategoryId = v),
     );
   }
 

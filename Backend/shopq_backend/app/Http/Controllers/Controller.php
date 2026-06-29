@@ -46,17 +46,25 @@ abstract class Controller
      * Convert a relative storage path to a full public URL.
      * Returns null if path is empty.
      */
-    protected function imageUrl(?string $path): ?string
+    /**
+     * Reduce any image value to a relative storage path (for STORING). Handles
+     * raw paths ("products/x.png") and absolute URLs that baked in a host and a
+     * /storage/ or /api/files/ prefix. Returns null if empty.
+     */
+    protected function relativeImagePath(?string $path): ?string
     {
         if (!$path) return null;
-
-        // Reduce any stored value to a relative storage path. Handles both raw
-        // paths ("banner/x.png") and legacy absolute URLs that baked in a host
-        // and a /storage/ or /api/files/ prefix.
         if (str_starts_with($path, 'http')) {
             $path = preg_replace('#^https?://[^/]+/(?:storage|api/files)/#', '', $path);
         }
         $path = ltrim($path, '/');
+        return $path !== '' ? $path : null;
+    }
+
+    protected function imageUrl(?string $path): ?string
+    {
+        $path = $this->relativeImagePath($path);
+        if (!$path) return null;
 
         // Build the URL against the CURRENT request host (localhost, LAN IP,
         // 10.0.2.2 emulator, …) rather than a hardcoded APP_URL, so images load

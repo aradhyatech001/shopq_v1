@@ -37,9 +37,26 @@ class AppNetworkImage extends StatelessWidget {
       fit: fit,
       width: width,
       height: height,
-      errorBuilder: errorBuilder,
-      loadingBuilder: loadingBuilder,
       webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
+      errorBuilder: (context, error, stackTrace) {
+        debugPrint('IMAGE ERROR: $url');
+        debugPrint(error.toString());
+
+        return Container(
+          color: Colors.grey.shade200,
+          child: const Icon(Icons.broken_image),
+        );
+      },
     );
+
+    // return Image.network(
+    //   url,
+    //   fit: fit,
+    //   width: width,
+    //   height: height,
+    //   errorBuilder: errorBuilder,
+    //   loadingBuilder: loadingBuilder,
+    //   webHtmlElementStrategy: WebHtmlElementStrategy.prefer,
+    // );
   }
 }

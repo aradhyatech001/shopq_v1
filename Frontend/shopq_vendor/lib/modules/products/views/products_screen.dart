@@ -22,6 +22,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
   List _products   = [];
   List _categories = [];
   List _types      = [];
+  List _brands     = [];
   bool _loading    = true;
 
   // Right-panel form state (wide screens). _formOpen + _formProduct(null = add).
@@ -41,15 +42,18 @@ class _ProductsScreenState extends State<ProductsScreen> {
         VendorApiHelper.get(ApiConstants.VENDOR_PRODUCTS),
         VendorApiHelper.get(ApiConstants.CATEGORIES),
         VendorApiHelper.get(ApiConstants.PRODUCT_TYPES),
+        VendorApiHelper.get(ApiConstants.BRANDS),
       ]);
       if (!mounted) return;
       final pData = jsonDecode(results[0].body);
       final cData = jsonDecode(results[1].body);
       final tData = jsonDecode(results[2].body);
+      final bData = jsonDecode(results[3].body);
       setState(() {
         _products   = pData['success'] == true ? pData['products'] ?? [] : [];
         _categories = cData is List ? List.from(cData) : [];  // GET /categories returns plain array
         _types      = tData['success'] == true ? tData['data']     ?? [] : [];  // key is 'data'
+        _brands     = bData['success'] == true ? bData['data']     ?? [] : [];
       });
     } catch (_) {
     } finally {
@@ -94,6 +98,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
             child: _ProductForm(
               categories: _categories,
               types: _types,
+              brands: _brands,
               existing: existing,
               onSaved: _load,
               onClose: () => Navigator.pop(context),
@@ -178,6 +183,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   key: ValueKey(_formProduct?['id'] ?? 'new'),
                   categories: _categories,
                   types: _types,
+                  brands: _brands,
                   existing: _formProduct,
                   onSaved: _load,
                   onClose: _closePanel,
@@ -455,6 +461,7 @@ class _NewImage {
 class _ProductForm extends StatefulWidget {
   final List categories;
   final List types;
+  final List brands;
   final Map? existing;
   final VoidCallback onSaved;
   final VoidCallback? onClose; // closes the side panel / pops the page
@@ -463,6 +470,7 @@ class _ProductForm extends StatefulWidget {
     super.key,
     required this.categories,
     required this.types,
+    this.brands = const [],
     this.existing,
     required this.onSaved,
     this.onClose,
@@ -479,6 +487,7 @@ class _ProductFormState extends State<_ProductForm> {
 
   int? _categoryId;
   int? _subcategoryId;
+  int? _brandId;
   List _subcategories = [];
   bool _loadingSubs = false;
   final Set<String> _selectedTypes = {};
@@ -504,6 +513,9 @@ class _ProductFormState extends State<_ProductForm> {
       _subcategoryId = p['subcategory_id'] is int
           ? p['subcategory_id']
           : int.tryParse('${p['subcategory_id'] ?? ''}');
+      _brandId       = p['brand_id'] is int
+          ? p['brand_id']
+          : int.tryParse('${p['brand_id'] ?? ''}');
       _savedId       = p['id'];
       if (_categoryId != null) _loadSubcategories(_categoryId!);
 
@@ -589,6 +601,7 @@ class _ProductFormState extends State<_ProductForm> {
         'description': _descCtrl.text.trim(),
         'main_category_id': _categoryId,
         if (_subcategoryId != null) 'subcategory_id': _subcategoryId,
+        'brand_id': _brandId,
         'types': _selectedTypes.join(', '),
         'variants': variants,
         'highlights': _highlights.where((h) => !h.isEmpty).map((h) => h.toJson()).toList(),
@@ -754,6 +767,34 @@ class _ProductFormState extends State<_ProductForm> {
                     ),
                   if (_subcategories.isNotEmpty || _loadingSubs) SizedBox(height: 16.h)
                   else SizedBox(height: 4.h),
+
+                  // ── Brand ────────────────────────────────────
+                  if (widget.brands.isNotEmpty) ...[
+                    DropdownButtonFormField<int>(
+                      value: widget.brands.any((b) =>
+                              (b['id'] is int ? b['id'] : int.tryParse('${b['id']}')) ==
+                              _brandId)
+                          ? _brandId
+                          : null,
+                      isExpanded: true,
+                      decoration: _deco('Brand (optional)'),
+                      items: [
+                        DropdownMenuItem<int>(
+                          value: null,
+                          child: Text('No brand',
+                              style: GoogleFonts.jost(color: AppColors.textSecondary)),
+                        ),
+                        ...widget.brands.map<DropdownMenuItem<int>>((b) {
+                          return DropdownMenuItem<int>(
+                            value: b['id'] is int ? b['id'] : int.tryParse('${b['id']}'),
+                            child: Text(b['name'] ?? '', style: GoogleFonts.jost()),
+                          );
+                        }),
+                      ],
+                      onChanged: (v) => setState(() => _brandId = v),
+                    ),
+                    SizedBox(height: 16.h),
+                  ],
 
                   // ── Product types ────────────────────────────
                   if (widget.types.isNotEmpty) ...[

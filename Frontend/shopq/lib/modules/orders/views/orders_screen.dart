@@ -9,7 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'package:shopq/modules/orders/views/order_detail_screen.dart';
-import 'package:shopq/modules/settings/views/refunds_screen.dart';
+// import 'package:shopq/modules/settings/views/refunds_screen.dart';
 import 'package:shopq/modules/orders/views/track_order_screen.dart';
 import 'package:shopq/core/network/api_endpoints.dart';
 import 'package:shopq/app/theme/app_colors.dart';
@@ -289,30 +289,30 @@ class _OrderScreenState extends State<OrderScreen>
                     ),
                   ),
                   // My Refunds shortcut
-                  InkWell(
-                    onTap: () => Get.to(() => const MyRefundsScreen()),
-                    borderRadius: BorderRadius.circular(8.r),
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 4.h),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.receipt_long_rounded,
-                              size: 16.sp, color: AppColors.primaryColor),
-                          SizedBox(width: 4.w),
-                          Text(
-                            'Refunds',
-                            style: GoogleFonts.jost(
-                              fontSize: 11.sp,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.primaryColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  SizedBox(width: 8.w),
+                  // InkWell(
+                  //   onTap: () => Get.to(() => const MyRefundsScreen()),
+                  //   borderRadius: BorderRadius.circular(8.r),
+                  //   child: Padding(
+                  //     padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 4.h),
+                  //     child: Row(
+                  //       mainAxisSize: MainAxisSize.min,
+                  //       children: [
+                  //         Icon(Icons.receipt_long_rounded,
+                  //             size: 16.sp, color: AppColors.primaryColor),
+                  //         SizedBox(width: 4.w),
+                  //         Text(
+                  //           'Refunds',
+                  //           style: GoogleFonts.jost(
+                  //             fontSize: 11.sp,
+                  //             fontWeight: FontWeight.w600,
+                  //             color: AppColors.primaryColor,
+                  //           ),
+                  //         ),
+                  //       ],
+                  //     ),
+                  //   ),
+                  // ),
+                  // SizedBox(width: 8.w),
                 ],
               ),
             ),
@@ -731,30 +731,30 @@ class _OrderScreenState extends State<OrderScreen>
                   ),
                 ),
               ),
-              SizedBox(width: 8.w),
-              // Refund request — for cancelled or delivered COD orders
-              if (status == 'cancelled' || status == 'delivered')
-                InkWell(
-                  onTap: () => _showRefundDialog(orderId),
-                  child: Container(
-                    width: 100.w,
-                    height: 27.h,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(7.r),
-                      border: Border.all(color: Colors.orange.shade400, width: 1.5.w),
-                    ),
-                    child: Center(
-                      child: Text(
-                        'Refund',
-                        style: GoogleFonts.jost(
-                          fontSize: 11.sp,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.orange.shade700,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+              // SizedBox(width: 8.w),
+              // // Refund request — for cancelled or delivered COD orders
+              // if (status == 'cancelled' || status == 'delivered')
+              //   InkWell(
+                //   onTap: () => _showRefundDialog(orderId),
+                //   child: Container(
+                //     width: 100.w,
+                //     height: 27.h,
+                //     decoration: BoxDecoration(
+                //       borderRadius: BorderRadius.circular(7.r),
+                //       border: Border.all(color: Colors.orange.shade400, width: 1.5.w),
+                //     ),
+                //     child: Center(
+                //       child: Text(
+                //         'Refund',
+                //         style: GoogleFonts.jost(
+                //           fontSize: 11.sp,
+                //           fontWeight: FontWeight.w700,
+                //           color: Colors.orange.shade700,
+                //         ),
+                //       ),
+                //     ),
+                //   ),
+                // ),
             ],
           ),
         ],

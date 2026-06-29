@@ -24,6 +24,7 @@ import '../../modules/pincode/bindings/pincode_binding.dart';
 import '../../modules/pincode/views/pincode_screen.dart';
 import '../../modules/subscription/bindings/subscription_binding.dart';
 import '../../modules/subscription/views/subscription_screen.dart';
+import '../../modules/notifications/views/notification_center_screen.dart';
 
 /// Central route table for the vendor app.
 ///
@@ -103,6 +104,10 @@ abstract class AppPages {
       name: AppRoutes.subscription,
       page: () => const SubscriptionScreen(),
       binding: SubscriptionBinding(),
+    ),
+    GetPage(
+      name: AppRoutes.notifications,
+      page: () => const NotificationCenterScreen(),
     ),
   ];
 }

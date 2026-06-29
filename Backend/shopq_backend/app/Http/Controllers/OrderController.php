@@ -10,7 +10,7 @@ use App\Models\CartItem;
 use App\Models\ProductVariant;
 use App\Models\DeliveryAddress;
 use App\Models\User;
-use App\Services\FcmService;
+use App\Services\NotificationService;
 use Illuminate\Support\Facades\DB;
 
 class OrderController extends Controller
@@ -23,6 +23,11 @@ class OrderController extends Controller
         // trust a user_id sent in the request body (IDOR prevention).
         $userId         = $request->user()->id;
         $couponCode     = $data['coupon_code'] ?? null;
+        // Treat empty / literal "null" (sent by some clients when no coupon is
+        // applied) as no coupon, so it isn't looked up as a real code.
+        if ($couponCode === '' || strtolower((string) $couponCode) === 'null') {
+            $couponCode = null;
+        }
         $discountAmount = (float) ($data['discount_amount'] ?? 0);
         $deliveryCharge = (float) ($data['delivery_charge'] ?? 0);
         $handlingCharge = (float) ($data['handling_charge'] ?? 0);
@@ -92,8 +97,20 @@ class OrderController extends Controller
 
         // ── H4: Validate coupon min_amount before applying ─────────
         if ($couponCode) {
-            $coupon = \App\Models\Coupon::where('code_name', $couponCode)->where('status', 1)->first();
-            if (!$coupon) {
+            // Match the coupon the same way CouponController@validate does:
+            // case-insensitive code_name + expiry check. (`status` is a
+            // visibility type like "Public", NOT a 1/0 active flag.)
+            $coupon = \App\Models\Coupon::whereRaw('LOWER(code_name) = ?', [strtolower($couponCode)])->first();
+            $expired = false;
+            if ($coupon) {
+                try {
+                    $expired = \Carbon\Carbon::createFromFormat('d-m-Y', $coupon->expri_date)
+                        ->endOfDay()->isPast();
+                } catch (\Throwable $e) {
+                    $expired = false;
+                }
+            }
+            if (!$coupon || $expired) {
                 return response()->json(['success' => false, 'message' => 'Invalid or expired coupon.']);
             }
             $minAmt = (float) ($coupon->min_amount ?? 0);
@@ -211,6 +228,21 @@ class OrderController extends Controller
             $order->id, $items, $userName, $userEmail,
             $discountAmount, $deliveryCharge, $handlingCharge, $finalAmount, $cartTotal
         );
+
+        // Notify each vendor of their new order (push + inbox; best-effort).
+        $notifier = app(\App\Services\NotificationService::class);
+        foreach (array_keys($vendorOrderIds) as $vid) {
+            $vendor = \App\Models\Vendor::find($vid);
+            if ($vendor) {
+                $notifier->notify(
+                    $vendor,
+                    'new_order',
+                    'New order received',
+                    "You have a new order #{$order->id}.",
+                    ['order_id' => (string) $order->id, 'deeplink' => 'shopq://order'],
+                );
+            }
+        }
 
         return response()->json([
             'success'      => true,
@@ -461,13 +493,15 @@ class OrderController extends Controller
 
         // Notify the customer (best-effort).
         $user = User::find($order->user_id);
-        if ($user && $user->fcm_token) {
+        if ($user) {
             $label = ucwords(str_replace('_', ' ', $newStatus));
-            app(FcmService::class)->send(
-                $user->fcm_token,
+            app(NotificationService::class)->notify(
+                $user,
+                'order_update',
                 'Order Update',
                 "Your order #{$order->id} is now: {$label}.",
-                ['order_id' => (string) $order->id, 'status' => $newStatus]
+                ['order_id' => (string) $order->id, 'status' => $newStatus,
+                 'deeplink' => "shopq://order/{$order->id}"]
             );
         }
 
@@ -544,6 +578,18 @@ class OrderController extends Controller
         \App\Models\VendorOrder::where('parent_order_id', $orderId)
             ->whereNotIn('status', ['delivered', 'cancelled'])
             ->update(['delivery_boy_id' => $deliveryBoyId]);
+
+        // Notify the delivery boy of the new assignment (push + inbox).
+        $rider = \App\Models\DeliveryBoy::find($deliveryBoyId);
+        if ($rider) {
+            app(\App\Services\NotificationService::class)->notify(
+                $rider,
+                'new_assignment',
+                'New delivery assigned',
+                "Order #{$orderId} has been assigned to you.",
+                ['order_id' => (string) $orderId, 'deeplink' => 'shopq://order'],
+            );
+        }
 
         return response()->json(['success' => true, 'message' => 'Order assignment successful']);
     }

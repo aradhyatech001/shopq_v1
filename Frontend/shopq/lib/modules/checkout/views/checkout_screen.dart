@@ -164,7 +164,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
     final body = {
       "user_id": userId,
-      "coupon_code": couponCode,
+      "coupon_code":
+          (couponCode.trim().isEmpty || couponCode.trim().toLowerCase() == 'null')
+              ? null
+              : couponCode.trim(),
       "discount_amount": discountAmount.toString(),
       "delivery_charge": deliveryCharge.toString(),
       "handling_charge": handlingCharge.toString(),

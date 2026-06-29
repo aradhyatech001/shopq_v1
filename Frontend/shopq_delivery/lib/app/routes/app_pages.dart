@@ -7,6 +7,7 @@ import '../../modules/auth/bindings/auth_binding.dart';
 import '../../modules/auth/views/login_screen.dart';
 import '../../modules/orders/bindings/order_binding.dart';
 import '../../modules/orders/views/orders_screen.dart';
+import '../../modules/notifications/views/notification_center_screen.dart';
 
 class AppPages {
   static const initial = AppRoutes.splash;
@@ -14,5 +15,6 @@ class AppPages {
     GetPage(name: AppRoutes.splash, page: () => const SplashScreen(), binding: SplashBinding()),
     GetPage(name: AppRoutes.login,  page: () => const LoginScreen(),  binding: AuthBinding()),
     GetPage(name: AppRoutes.home,   page: () => const OrdersScreen(), binding: OrderBinding()),
+    GetPage(name: AppRoutes.notifications, page: () => const NotificationCenterScreen()),
   ];
 }

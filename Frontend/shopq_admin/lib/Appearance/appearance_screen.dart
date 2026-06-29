@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -91,21 +92,30 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
         'payment_online_enabled': _onlineEnabled ? '1' : '0',
         'banner_autoplay': _bannerAutoplay ? '1' : '0',
       };
-      final res = await AdminApi.postJson(Uri.parse(ApiConstants.APP_CONFIG_UPDATE), body: body);
+      final res = await AdminApi.postJson(
+        Uri.parse(ApiConstants.APP_CONFIG_UPDATE),
+        body: body,
+      );
       final data = jsonDecode(res.body);
       if (!mounted) return;
       final ok = data['success'] == true;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(ok ? 'Appearance saved' : (data['message'] ?? 'Failed'),
-            style: GoogleFonts.jost()),
-        backgroundColor: ok ? AppColors.successColor : AppColors.errorColor,
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            ok ? 'Appearance saved' : (data['message'] ?? 'Failed'),
+            style: GoogleFonts.jost(),
+          ),
+          backgroundColor: ok ? AppColors.successColor : AppColors.errorColor,
+        ),
+      );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Error: $e', style: GoogleFonts.jost()),
-          backgroundColor: AppColors.errorColor,
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e', style: GoogleFonts.jost()),
+            backgroundColor: AppColors.errorColor,
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -134,14 +144,22 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('User App Appearance',
-                          style: GoogleFonts.jost(
-                              fontSize: 24.sp, fontWeight: FontWeight.w800)),
+                      Text(
+                        'User App Appearance',
+                        style: GoogleFonts.jost(
+                          fontSize: 24.sp,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                       SizedBox(height: 4.h),
-                      Text('Controls the colors and texts of the customer app. '
-                          'Changes apply when the app is next opened.',
-                          style: GoogleFonts.jost(
-                              fontSize: 13.sp, color: AppColors.secondaryTextColor)),
+                      Text(
+                        'Controls the colors and texts of the customer app. '
+                        'Changes apply when the app is next opened.',
+                        style: GoogleFonts.jost(
+                          fontSize: 13.sp,
+                          color: AppColors.secondaryTextColor,
+                        ),
+                      ),
                       SizedBox(height: 24.h),
                       ..._fields.map(_buildField),
                       SizedBox(height: 8.h),
@@ -155,18 +173,26 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                             backgroundColor: AppColors.primaryColor,
                             padding: EdgeInsets.symmetric(vertical: 16.h),
                             shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(10.r)),
+                              borderRadius: BorderRadius.circular(10.r),
+                            ),
                           ),
                           child: _saving
                               ? SizedBox(
-                                  width: 20.w, height: 20.w,
+                                  width: 20.w,
+                                  height: 20.w,
                                   child: const CircularProgressIndicator(
-                                      color: Colors.white, strokeWidth: 2))
-                              : Text('Save Appearance',
+                                    color: Colors.white,
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Text(
+                                  'Save Appearance',
                                   style: GoogleFonts.jost(
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 15.sp,
-                                      color: Colors.white)),
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 15.sp,
+                                    color: Colors.white,
+                                  ),
+                                ),
                         ),
                       ),
                     ],
@@ -189,21 +215,41 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Payment & Display',
-              style: GoogleFonts.jost(fontSize: 16.sp, fontWeight: FontWeight.w700)),
+          Text(
+            'Payment & Display',
+            style: GoogleFonts.jost(
+              fontSize: 16.sp,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
           SizedBox(height: 2.h),
-          Text('Checkout payment options and banner behaviour.',
-              style: GoogleFonts.jost(fontSize: 12.sp, color: AppColors.secondaryTextColor)),
+          Text(
+            'Checkout payment options and banner behaviour.',
+            style: GoogleFonts.jost(
+              fontSize: 12.sp,
+              color: AppColors.secondaryTextColor,
+            ),
+          ),
           SizedBox(height: 8.h),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             activeColor: AppColors.primaryColor,
             value: _codEnabled,
             onChanged: (v) => setState(() => _codEnabled = v),
-            title: Text('Cash on Delivery (COD)',
-                style: GoogleFonts.jost(fontSize: 14.sp, fontWeight: FontWeight.w600)),
-            subtitle: Text('Pay in cash when the order arrives',
-                style: GoogleFonts.jost(fontSize: 12.sp, color: AppColors.secondaryTextColor)),
+            title: Text(
+              'Cash on Delivery (COD)',
+              style: GoogleFonts.jost(
+                fontSize: 14.sp,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            subtitle: Text(
+              'Pay in cash when the order arrives',
+              style: GoogleFonts.jost(
+                fontSize: 12.sp,
+                color: AppColors.secondaryTextColor,
+              ),
+            ),
           ),
           Divider(height: 1.h, color: AppColors.borderColor),
           SwitchListTile(
@@ -211,10 +257,20 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
             activeColor: AppColors.primaryColor,
             value: _onlineEnabled,
             onChanged: (v) => setState(() => _onlineEnabled = v),
-            title: Text('Online Payment (UPI)',
-                style: GoogleFonts.jost(fontSize: 14.sp, fontWeight: FontWeight.w600)),
-            subtitle: Text('Pay online via any UPI app',
-                style: GoogleFonts.jost(fontSize: 12.sp, color: AppColors.secondaryTextColor)),
+            title: Text(
+              'Online Payment (UPI)',
+              style: GoogleFonts.jost(
+                fontSize: 14.sp,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            subtitle: Text(
+              'Pay online via any UPI app',
+              style: GoogleFonts.jost(
+                fontSize: 12.sp,
+                color: AppColors.secondaryTextColor,
+              ),
+            ),
           ),
           Divider(height: 1.h, color: AppColors.borderColor),
           SwitchListTile(
@@ -222,32 +278,47 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
             activeColor: AppColors.primaryColor,
             value: _bannerAutoplay,
             onChanged: (v) => setState(() => _bannerAutoplay = v),
-            title: Text('Auto-slide banners',
-                style: GoogleFonts.jost(fontSize: 14.sp, fontWeight: FontWeight.w600)),
-            subtitle: Text('Carousel auto-plays when a section has multiple banners',
-                style: GoogleFonts.jost(fontSize: 12.sp, color: AppColors.secondaryTextColor)),
+            title: Text(
+              'Auto-slide banners',
+              style: GoogleFonts.jost(
+                fontSize: 14.sp,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            subtitle: Text(
+              'Carousel auto-plays when a section has multiple banners',
+              style: GoogleFonts.jost(
+                fontSize: 12.sp,
+                color: AppColors.secondaryTextColor,
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildField(_Field f) {
+  /* Widget _buildField(_Field f) {
     final preview = f.isColor ? _parseHex(f.ctrl.text) : null;
     return Padding(
       padding: EdgeInsets.only(bottom: 16.h),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(f.label,
-              style: GoogleFonts.jost(
-                  fontSize: 13.sp, fontWeight: FontWeight.w600)),
+          Text(
+            f.label,
+            style: GoogleFonts.jost(
+              fontSize: 13.sp,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           SizedBox(height: 6.h),
           Row(
             children: [
               if (f.isColor) ...[
                 Container(
-                  width: 40.w, height: 40.w,
+                  width: 40.w,
+                  height: 40.w,
                   decoration: BoxDecoration(
                     color: preview ?? AppColors.borderColor,
                     borderRadius: BorderRadius.circular(8.r),
@@ -266,25 +337,157 @@ class _AppearanceScreenState extends State<AppearanceScreen> {
                     hintStyle: GoogleFonts.jost(color: AppColors.hintTextColor),
                     filled: true,
                     fillColor: AppColors.surfaceColor,
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 14.w, vertical: 12.h),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 14.w,
+                      vertical: 12.h,
+                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10.r),
-                      borderSide: const BorderSide(color: AppColors.borderColor),
+                      borderSide: const BorderSide(
+                        color: AppColors.borderColor,
+                      ),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10.r),
-                      borderSide: const BorderSide(color: AppColors.borderColor),
+                      borderSide: const BorderSide(
+                        color: AppColors.borderColor,
+                      ),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10.r),
-                      borderSide:
-                          BorderSide(color: AppColors.primaryColor, width: 1.5),
+                      borderSide: BorderSide(
+                        color: AppColors.primaryColor,
+                        width: 1.5,
+                      ),
                     ),
                   ),
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  } */
+
+  Widget _buildField(_Field f) {
+    final preview = f.isColor ? _parseHex(f.ctrl.text) : null;
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: 16.h),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            f.label,
+            style: GoogleFonts.jost(
+              fontSize: 13.sp,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          SizedBox(height: 6.h),
+          Row(
+            children: [
+              if (f.isColor) ...[
+                GestureDetector(
+                  onTap: () => _pickColor(f),
+                  child: Container(
+                    width: 48.w,
+                    height: 48.w,
+                    decoration: BoxDecoration(
+                      color: preview ?? Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(10.r),
+                      border: Border.all(color: AppColors.borderColor),
+                    ),
+                    child: const Icon(
+                      Icons.color_lens,
+                      color: Colors.white,
+                      size: 22,
+                    ),
+                  ),
+                ),
+                SizedBox(width: 10.w),
+              ],
+              Expanded(
+                child: TextField(
+                  controller: f.ctrl,
+                  onChanged: f.isColor ? (_) => setState(() {}) : null,
+                  style: GoogleFonts.jost(fontSize: 14.sp),
+                  decoration: InputDecoration(
+                    hintText: f.isColor ? '#RRGGBB' : null,
+                    hintStyle: GoogleFonts.jost(color: AppColors.hintTextColor),
+                    suffixIcon: f.isColor
+                        ? IconButton(
+                            icon: const Icon(Icons.palette),
+                            onPressed: () => _pickColor(f),
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: AppColors.surfaceColor,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 14.w,
+                      vertical: 12.h,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10.r),
+                      borderSide: const BorderSide(
+                        color: AppColors.borderColor,
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10.r),
+                      borderSide: const BorderSide(
+                        color: AppColors.borderColor,
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10.r),
+                      borderSide: BorderSide(
+                        color: AppColors.primaryColor,
+                        width: 1.5,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickColor(_Field field) async {
+    Color pickerColor = _parseHex(field.ctrl.text) ?? Colors.blue;
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Select Color'),
+        content: SingleChildScrollView(
+          child: ColorPicker(
+            pickerColor: pickerColor,
+            onColorChanged: (color) {
+              pickerColor = color;
+            },
+            enableAlpha: false,
+            displayThumbColor: true,
+            paletteType: PaletteType.hsv,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              field.ctrl.text =
+                  '#${pickerColor.value.toRadixString(16).substring(2).toUpperCase()}';
+              setState(() {});
+              Navigator.pop(context);
+            },
+            child: const Text('Select'),
           ),
         ],
       ),

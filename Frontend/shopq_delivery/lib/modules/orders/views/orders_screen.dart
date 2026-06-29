@@ -13,6 +13,7 @@ import '../../../core/network/api_endpoints.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/storage/storage_service.dart';
 import '../../../core/utils/order_status.dart';
+import '../../notifications/controllers/notification_controller.dart';
 
 class OrdersScreen extends StatefulWidget {
   const OrdersScreen({super.key});
@@ -251,6 +252,51 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
+  NotificationController get _notif =>
+      Get.isRegistered<NotificationController>()
+          ? Get.find<NotificationController>()
+          : Get.put(NotificationController(), permanent: true);
+
+  Widget _notificationBell() {
+    return GestureDetector(
+      onTap: () {
+        _notif.fetch();
+        Get.toNamed(AppRoutes.notifications);
+      },
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 8.w),
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            Icon(Icons.notifications_rounded,
+                size: 22.sp, color: AppColors.textSecondary),
+            Obx(() {
+              final n = _notif.unread.value;
+              if (n == 0) return const SizedBox.shrink();
+              return Positioned(
+                right: -4.w,
+                top: -4.h,
+                child: Container(
+                  padding: EdgeInsets.all(2.w),
+                  constraints: BoxConstraints(minWidth: 14.w, minHeight: 14.w),
+                  decoration: const BoxDecoration(
+                      color: AppColors.error, shape: BoxShape.circle),
+                  child: Text(n > 9 ? '9+' : '$n',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.jost(
+                          color: Colors.white,
+                          fontSize: 8.sp,
+                          fontWeight: FontWeight.bold)),
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -268,6 +314,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
           ],
         ),
         actions: [
+          _notificationBell(),
           IconButton(onPressed: () => _load(), icon: Icon(Icons.refresh_rounded, color: AppColors.textSecondary, size: 20.sp)),
           IconButton(onPressed: _logout, icon: Icon(Icons.logout_rounded, color: AppColors.error, size: 20.sp)),
           SizedBox(width: 6.w),

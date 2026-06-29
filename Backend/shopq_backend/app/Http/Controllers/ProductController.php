@@ -26,14 +26,18 @@ class ProductController extends Controller
         return null;
     }
 
-    private function buildProductResponse($product)
+    public function buildProductResponse($product)
     {
         $info = $product->info()->select('attribute', 'value')->get()->toArray();
         $brandInfo = collect($info)->first(function ($item) {
             return isset($item['attribute']) && strcasecmp(trim($item['attribute']), 'brand') === 0;
         });
-        $brandName  = $brandInfo['value'] ?? null;
-        $brandImage = $product->category?->image ? $this->imageUrl($product->category->image) : null;
+        // Prefer the real brand (brands table); fall back to the legacy
+        // "Brand" info attribute / category for products without a brand_id.
+        $brandName  = $product->brand?->name ?? $brandInfo['value'] ?? null;
+        $brandImage = $product->brand?->image
+            ? $this->imageUrl($product->brand->image)
+            : ($product->category?->image ? $this->imageUrl($product->category->image) : null);
         $subId      = $this->getSubcategoryId($product);
 
         $subcategoryName = $product->subcategory?->name ?? null;
@@ -96,7 +100,7 @@ class ProductController extends Controller
         $search     = $request->query('search', '');
         $categoryId = $request->query('category_id');
 
-        $query = Product::with(['category:id,name', 'subcategory:id,name', 'variants', 'info', 'highlights', 'images'])->visible();
+        $query = Product::with(['category:id,name', 'subcategory:id,name', 'brand:id,name,image', 'variants', 'info', 'highlights', 'images'])->visible();
         $query->servingPincode($this->resolvePincodeId($request));
         if ($search) {
             $query->where(function ($q) use ($search) {
@@ -141,7 +145,7 @@ class ProductController extends Controller
         $hasSubNew = Schema::hasColumn('products', 'subcategory_id');
         $hasSubOld = Schema::hasColumn('products', 'sub_category_id');
 
-        $query = Product::with(['category:id,name,image', 'subcategory:id,name', 'variants', 'info', 'highlights', 'images'])->visible();
+        $query = Product::with(['category:id,name,image', 'subcategory:id,name', 'brand:id,name,image', 'variants', 'info', 'highlights', 'images'])->visible();
         $query->servingPincode($this->resolvePincodeId($request));
 
         // category_id=0 or missing = no category filter (used for deals/all-products tabs)
@@ -174,7 +178,7 @@ class ProductController extends Controller
         $limit  = max(1, (int) $request->query('limit', 10));
         $type   = $request->query('type', '');
 
-        $query = Product::with(['category:id,name,image', 'variants', 'info', 'highlights', 'images'])->visible();
+        $query = Product::with(['category:id,name,image', 'brand:id,name,image', 'variants', 'info', 'highlights', 'images'])->visible();
         $query->servingPincode($this->resolvePincodeId($request));
         if ($type) $query->whereRaw("FIND_IN_SET(?, types)", [$type]);
 
@@ -193,7 +197,7 @@ class ProductController extends Controller
             return response()->json(['success' => false, 'message' => 'subcategory_id or category_id required'], 400);
         }
 
-        $query = Product::with(['category:id,name,image', 'variants', 'info', 'highlights', 'images'])->visible();
+        $query = Product::with(['category:id,name,image', 'brand:id,name,image', 'variants', 'info', 'highlights', 'images'])->visible();
         $query->servingPincode($this->resolvePincodeId($request));
         if ($subcategoryId > 0 && Schema::hasColumn('products', 'subcategory_id')) {
             $query->where('subcategory_id', $subcategoryId);
@@ -269,24 +273,14 @@ class ProductController extends Controller
         // Highlights
         $this->syncKeyValue(ProductHighlight::class, $productId, $data['highlights'] ?? []);
 
-        // Images — strip full URL prefix back to relative path for comparison.
-        // imageUrl() returns /api/files/… URLs, NOT /storage/… — must strip the right prefix.
+        // Images — reduce each submitted URL back to a relative storage path,
+        // host-agnostically (the URL may use the LAN IP / a different host than
+        // config('app.url'), which previously broke the match and wiped images).
         $existingImages = ProductImage::where('product_id', $productId)->pluck('image_url')->toArray();
-        $appUrl = rtrim(config('app.url'), '/');
-        $incoming = array_map(function ($url) use ($appUrl) {
-            if (!str_starts_with($url, 'http')) return ltrim($url, '/');
-            // Strip /api/files/ prefix (current format used by imageUrl() helper)
-            $apiPrefix = $appUrl . '/api/files/';
-            if (str_starts_with($url, $apiPrefix)) {
-                return substr($url, strlen($apiPrefix));
-            }
-            // Strip /storage/ prefix (legacy format, just in case)
-            $storagePrefix = $appUrl . '/storage/';
-            if (str_starts_with($url, $storagePrefix)) {
-                return substr($url, strlen($storagePrefix));
-            }
-            return $url;
-        }, $data['images'] ?? []);
+        $incoming = array_values(array_filter(array_map(
+            fn($url) => $this->relativeImagePath($url),
+            $data['images'] ?? []
+        )));
         // Only reconcile images when the client actually sent an `images` list.
         // (Without this guard, an update payload that omits images would treat
         // the incoming list as empty and delete every image of the product.)

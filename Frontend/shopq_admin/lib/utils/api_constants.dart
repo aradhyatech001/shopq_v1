@@ -1,10 +1,28 @@
 class ApiConstants {
-  static const String BASE_URL = "http://192.168.1.6:8000/api";
-  static const String BASE_IMAGE_URL = "http://192.168.1.6:8000/storage/";
+  // static const String BASE_URL = "http://192.168.1.6:8000/api";
+  // static const String BASE_IMAGE_URL = "http://192.168.1.6:8000/storage/";
   // static const String BASE_URL = "http://localhost:8000/api";
   // static const String BASE_IMAGE_URL = "http://localhost:8000/storage/";
-  // static const String BASE_URL = "https://shopq.solarsunshakti.com/api";
-  // static const String BASE_IMAGE_URL = "https://shopq.solarsunshakti.com/storage/";
+  static const String BASE_URL = "https://shopq.solarsunshakti.com/api";
+  static const String BASE_IMAGE_URL = "https://shopq.solarsunshakti.com/storage/";
+
+  // ── Brands ────────────────────────────────────────
+  static const String BRANDS_ALL    = "$BASE_URL/admin/brands";
+  static const String BRAND_ADD     = "$BASE_URL/admin/brands/add";
+  static const String BRAND_EDIT    = "$BASE_URL/admin/brands/edit";
+  static const String BRAND_TOGGLE  = "$BASE_URL/admin/brands/toggle";
+  static const String BRAND_REORDER = "$BASE_URL/admin/brands/reorder";
+  static const String BRAND_DELETE  = "$BASE_URL/admin/brands/delete";
+
+  // ── Notification Campaigns ────────────────────────
+  static const String CAMPAIGNS          = "$BASE_URL/admin/campaigns";
+  static const String CAMPAIGN_PREVIEW   = "$BASE_URL/admin/campaigns/preview-audience";
+  static const String USER_STATS_REBUILD = "$BASE_URL/admin/user-stats/rebuild";
+  static String campaignSend(int id)      => "$BASE_URL/admin/campaigns/$id/send";
+  static String campaignCancel(int id)    => "$BASE_URL/admin/campaigns/$id/cancel";
+  static String campaignUpdate(int id)    => "$BASE_URL/admin/campaigns/$id";
+  static String campaignDuplicate(int id) => "$BASE_URL/admin/campaigns/$id/duplicate";
+  static String campaignDelete(int id)    => "$BASE_URL/admin/campaigns/$id";
 
   // ── Auth ──────────────────────────────────────────
   static const String LOGIN    = "$BASE_URL/admin/login";

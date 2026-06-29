@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:shopq/core/widgets/app_network_image.dart';
+import 'package:shopq/core/widgets/category_section.dart';
 import 'package:get/get.dart';
 import '../../../app/routes/app_routes.dart';
 
@@ -243,74 +244,17 @@ class _CategoryScreenState extends State<CategoryScreen> {
           ),
         );
       } else {
+        // Reuse the shared category grid. Empty title => no header here, since
+        // this screen already draws its own image + name header above.
         sections.add(
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 12.w),
-            child: GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 4,
-                childAspectRatio: 0.72,
-                crossAxisSpacing: 6.w,
-                mainAxisSpacing: 10.h,
-              ),
-              itemCount: subs.length,
-              itemBuilder: (ctx, i) {
-                final sub = subs[i];
-                final subId = int.tryParse(sub['id'].toString());
-                final imgUrl = sub['image']?.toString() ?? '';
-
-                return GestureDetector(
-                  onTap: () => Get.to(() => CategoryViewScreen(
-                        categoryId: catId,
-                        categoryName: sub['name']?.toString() ?? '',
-                        initialSubCategoryId: subId,
-                      )),
-                  child: Column(
-                    children: [
-                      Container(
-                        height: 60.h,
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryColor.withValues(alpha: 0.07),
-                          borderRadius: BorderRadius.circular(10.r),
-                        ),
-                        child: imgUrl.isNotEmpty
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(10.r),
-                                child: AppNetworkImage(
-                                  imgUrl,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (_, _, _) => Icon(
-                                    Icons.category_outlined,
-                                    color: AppColors.primaryColor,
-                                    size: 22.sp,
-                                  ),
-                                ),
-                              )
-                            : Icon(
-                                Icons.category_outlined,
-                                color: AppColors.primaryColor,
-                                size: 22.sp,
-                              ),
-                      ),
-                      SizedBox(height: 5.h),
-                      Text(
-                        sub['name']?.toString() ?? '',
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.jost(
-                          fontSize: 10.sp,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
+          CategorySection(
+            title: '',
+            items: subs,
+            onItemTap: (sub) => Get.to(() => CategoryViewScreen(
+                  categoryId: catId,
+                  categoryName: sub['name']?.toString() ?? '',
+                  initialSubCategoryId: int.tryParse(sub['id'].toString()),
+                )),
           ),
         );
       }

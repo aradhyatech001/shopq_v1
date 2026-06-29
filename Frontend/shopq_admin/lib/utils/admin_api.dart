@@ -19,6 +19,10 @@ class AdminApi {
     return http.get(url, headers: await _authHeaders());
   }
 
+  static Future<http.Response> delete(Uri url) async {
+    return http.delete(url, headers: await _authHeaders());
+  }
+
   static Future<http.Response> post(
     Uri url, {
     Map<String, String>? body,
